@@ -6,6 +6,8 @@ set(CMAKE_CUDA_STANDARD 17)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(fmt REQUIRED)
 
 set(CMAKE_CUDA_ARCHITECTURES 75;86)
 
@@ -17,6 +19,8 @@ add_library(voxel_mapping SHARED
 target_link_libraries(voxel_mapping PUBLIC
   CUDA::cudart
   Eigen3::Eigen
+  spdlog::spdlog
+  fmt::fmt
 )
 
 target_include_directories(voxel_mapping PUBLIC

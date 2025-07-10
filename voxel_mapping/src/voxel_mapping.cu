@@ -1,5 +1,5 @@
 #include <cuda_runtime.h>
-#include <iostream>
+#include <cuda_checks.hpp>
 #include <cfloat>
 
 __constant__ float d_intrinsics[4];
@@ -24,33 +24,33 @@ __constant__ float d_free_threshold;
 #define SLICE_INDEX(x, y, size_x) ((y) * (size_x) + (x))
 
 extern "C" void set_intrinsics_d(const float* intrinsics) {
-    cudaMemcpyToSymbol(d_intrinsics, intrinsics, 4 * sizeof(float), 0, cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_intrinsics, intrinsics, 4 * sizeof(float), 0, cudaMemcpyHostToDevice));
 }
 
 extern "C" void set_image_size_d(uint width, uint height) {
-    cudaMemcpyToSymbol(d_image_width, &width, sizeof(uint), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_image_height, &height, sizeof(uint), 0, cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_image_width, &width, sizeof(uint), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_image_height, &height, sizeof(uint), 0, cudaMemcpyHostToDevice));
 }
 
 extern "C" void set_grid_constants_d(uint grid_size_x, uint grid_size_y, uint grid_size_z, float resolution) {
-    cudaMemcpyToSymbol(d_grid_size_x, &grid_size_x, sizeof(uint), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_grid_size_y, &grid_size_y, sizeof(uint), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_grid_size_z, &grid_size_z, sizeof(uint), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_resolution, &resolution, sizeof(float), 0, cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_grid_size_x, &grid_size_x, sizeof(uint), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_grid_size_y, &grid_size_y, sizeof(uint), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_grid_size_z, &grid_size_z, sizeof(uint), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_resolution, &resolution, sizeof(float), 0, cudaMemcpyHostToDevice));
 }
 
 extern "C" void set_depth_range_d(float min_depth, float max_depth) {
-    cudaMemcpyToSymbol(d_min_depth, &min_depth, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_max_depth, &max_depth, sizeof(float), 0, cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_min_depth, &min_depth, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_max_depth, &max_depth, sizeof(float), 0, cudaMemcpyHostToDevice));
 }
 
 extern "C" void set_log_odds_properties_d(float log_odds_occupied, float log_odds_free, float log_odds_min, float log_odds_max, float occupancy_threshold, float free_threshold) {
-    cudaMemcpyToSymbol(d_log_odds_occupied, &log_odds_occupied, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_log_odds_free, &log_odds_free, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_log_odds_min, &log_odds_min, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_log_odds_max, &log_odds_max, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_occupancy_threshold, &occupancy_threshold, sizeof(float), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_free_threshold, &free_threshold, sizeof(float), 0, cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_log_odds_occupied, &log_odds_occupied, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_log_odds_free, &log_odds_free, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_log_odds_min, &log_odds_min, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_log_odds_max, &log_odds_max, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_occupancy_threshold, &occupancy_threshold, sizeof(float), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_free_threshold, &free_threshold, sizeof(float), 0, cudaMemcpyHostToDevice));
 }
 
 __global__ void aabb_raycasting_kernel(
@@ -180,11 +180,7 @@ extern "C" void launch_process_depth_kernels(
         d_depth, d_transform, d_aabb,
         min_x, max_x, min_y, max_y, min_z, max_z);
 
-    cudaError_t err = cudaStreamSynchronize(stream);
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA Error after aabb_raycasting_kernel: " << cudaGetErrorString(err) << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    CHECK_CUDA_ERROR(cudaStreamSynchronize(stream));
 
     int aabb_size_x = max_x - min_x + 1;
     int aabb_size_y = max_y - min_y + 1;
@@ -287,11 +283,7 @@ extern "C" void launch_initialize_float_kernel(
     int blocks_per_grid = (n + threads_per_block - 1) / threads_per_block;
     initialize_float_kernel<<<blocks_per_grid, threads_per_block>>>(arr, value, n);
     
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA kernel launch failed for initialize_float_kernel: " << cudaGetErrorString(err) << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    CHECK_CUDA_ERROR(cudaGetLastError());
 }
 
 extern "C" void launch_extract_binary_slice_kernel(
@@ -526,18 +518,10 @@ extern "C" void launch_edt_kernels(float* d_binary_slice, float* d_edt, int widt
     dim3 gridDim((height + threadsPerBlock - 1) / threadsPerBlock, width);
     edt_col_kernel<<<gridDim, blockDim, height * sizeof(float), stream>>>(d_binary_slice, d_edt, width, height);
 
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA Error after Phase 1: " << cudaGetErrorString(err) << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    CHECK_CUDA_ERROR(cudaGetLastError());
 
     dim3 gridDim2((width + threadsPerBlock - 1) / threadsPerBlock, height);
     edt_row_kernel<<<gridDim2, blockDim, width * sizeof(float), stream>>>(d_edt, width, height);
 
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA Error after Phase 2: " << cudaGetErrorString(err) << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    CHECK_CUDA_ERROR(cudaGetLastError());
 }
