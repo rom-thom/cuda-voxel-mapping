@@ -1,0 +1,6 @@
+[submodule "voxel_mapping/submodules/cccl"]
+	path = voxel_mapping/submodules/cccl
+	url = git@github.com:NVIDIA/cccl.git
+[submodule "voxel_mapping/submodules/cuco"]
+	path = voxel_mapping/submodules/cuco
+	url = git@github.com:NVIDIA/cuCollections.git

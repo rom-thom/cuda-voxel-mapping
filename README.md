@@ -1,3 +1,13 @@
+# Dependencies
+
+The `voxel_mapping` package internally depends on **cuCollections** (a GPU-accelerated concurrent data structures library) and **CCCL** (CUDA C++ Core Libraries). Due to these dependencies, `voxel_mapping` and any package that uses it inherit specific system requirements.
+
+When building `voxel_mapping` or any package that links against it, ensure your development environment meets **all** of the following minimum requirements:
+
+- **NVCC (NVIDIA CUDA Compiler):** 12.0 or newer  
+- **C++ Standard:** C++17  
+- **GPU Architecture:** Volta (Compute Capability 7.0) or newer  
+- **CMake:** 3.30.4 or newer
 
 # Using the `voxel_mapping` Library in a ROS 2 Package
 
