@@ -23,7 +23,9 @@ find_package(fmt REQUIRED)
 
 add_library(voxel_mapping SHARED
   src/voxel_mapping.cpp
-  src/voxel_mapping.cu
+  src/constant_broadcaster.cu
+  src/insertion.cu
+  src/extraction.cu
   src/hash_map.cu
 )
 

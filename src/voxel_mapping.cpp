@@ -1,6 +1,7 @@
 #include "voxel_mapping.hpp"
-#include "cuda_checks.hpp"
+#include "macros.hpp"
 #include <cuda_runtime.h>
+#include "constant_broadcaster.hpp"
 #include <vector>
 #include <cfloat>
 #include <iostream>
@@ -44,9 +45,9 @@ public:
         CHECK_CUDA_ERROR(cudaMalloc(&d_voxel_grid_, matrix_size));
         CHECK_CUDA_ERROR(cudaMemset(d_voxel_grid_, 0, matrix_size));
         
-        set_grid_constants_d(resolution_, size_x_, size_y_, size_z_);
-        set_depth_range_d(min_depth_, max_depth_);
-        set_log_odds_properties_d(log_odds_occupied_, log_odds_free_, log_odds_min_, log_odds_max_, occupancy_threshold_, free_threshold_);
+        broadcast_grid_constants(size_x_, size_y_, size_z_, resolution_);
+        broadcast_depth_range(min_depth_, max_depth_);
+        broadcast_log_odds(log_odds_occupied_, log_odds_free_, log_odds_min_, log_odds_max_, occupancy_threshold_, free_threshold_);
 
         spdlog::info("Voxel grid initialized on GPU with size {}x{}x{}", size_x_, size_y_, size_z_);
     }
@@ -271,13 +272,13 @@ void VoxelMapping::set_K(float fx, float fy, float cx, float cy) {
     pimpl_->cx_ = cx;
     pimpl_->cy_ = cy;
     float intrinsics[4] = {fx, fy, cx, cy};
-    set_intrinsics_d(intrinsics);
+    broadcast_intrinsics(intrinsics);
 }
 
 void VoxelMapping::set_image_size(int width, int height) {
     pimpl_->image_width_ = width;
     pimpl_->image_height_ = height;
-    set_image_size_d(width, height);
+    broadcast_image_size(width, height);
 }
 
 std::vector<float> VoxelMapping::get_grid_block(const Eigen::VectorXi& aabb_indices) {
