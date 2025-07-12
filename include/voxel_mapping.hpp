@@ -2,8 +2,12 @@
 #define VOXEL_MAPPING_HPP
 
 #include <cstdint>
-#include <cuda_runtime.h>
 #include <Eigen/Dense>
+#include <vector>
+#include <memory>
+
+struct CUstream_st;
+using cudaStream_t = CUstream_st*;
 
 extern "C" void set_intrinsics_d(const float* intrinsics);
 extern "C" void set_image_size_d(int width, int height);
@@ -43,10 +47,16 @@ extern "C" void launch_initialize_float_kernel(
 class VoxelMapping {
 public:
     VoxelMapping(float resolution, uint size_x, uint size_y, uint size_z, float min_depth, float max_depth, float log_odds_occupied, float log_odds_free, float log_odds_min, float log_odds_max, float occupancy_threshold, float free_threshold);
+    
     ~VoxelMapping();
+
+    VoxelMapping(VoxelMapping&&);
+    VoxelMapping& operator=(VoxelMapping&&);
+    VoxelMapping(const VoxelMapping&) = delete;
+    VoxelMapping& operator=(const VoxelMapping&) = delete;
+
     void set_K(float fx, float fy, float cx, float cy);
     void set_image_size(int width, int height);
-    void set_log_odds_properties(float log_odds_occupied, float log_odds_free, float log_odds_min, float log_odds_max, float occupancy_threshold, float free_threshold);
 
     void integrate_depth(const float* depth_image, const Eigen::Matrix4f& transform, const Eigen::VectorXi& aabb_indices);
     
@@ -59,19 +69,9 @@ public:
     void extract_esdf(const Eigen::VectorXi& indices, std::vector<float>& esdf);
     
 private:
-    void init_grid();
-    void allocate_aabb_device(const Eigen::VectorXi& aabb_indices);
+    class VoxelMappingImpl;
 
-    float resolution_;
-    uint size_x_, size_y_, size_z_;
-    float *d_voxel_grid_;
-    float *d_buffer_;
-    char *d_aabb_;
-    cudaStream_t stream_;
-    float fx_, fy_, cx_, cy_;
-    float min_depth_, max_depth_;
-    int image_width_, image_height_;
-    float log_odds_occupied_, log_odds_free_, log_odds_min_, log_odds_max_, occupancy_threshold_, free_threshold_;
+    std::unique_ptr<VoxelMappingImpl> pimpl_;
 };
 
 #endif // VOXEL_MAPPING_HPP

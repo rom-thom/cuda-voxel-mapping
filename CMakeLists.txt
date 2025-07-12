@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30.4)
+cmake_minimum_required(VERSION 3.22.1)
 project(voxel_mapping VERSION 0.1.0 LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -27,11 +27,13 @@ add_library(voxel_mapping SHARED
   src/hash_map.cu
 )
 
-target_link_libraries(voxel_mapping PUBLIC
-  CUDA::cudart
-  Eigen3::Eigen
-  spdlog::spdlog
-  fmt::fmt
+target_link_libraries(voxel_mapping
+  PUBLIC
+    Eigen3::Eigen
+  PRIVATE
+    CUDA::cudart
+    spdlog::spdlog
+    fmt::fmt
 )
 
 target_include_directories(voxel_mapping
@@ -39,7 +41,7 @@ target_include_directories(voxel_mapping
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     ${EIGEN3_INCLUDE_DIRS}
-  PRIVATE
+    PRIVATE
     ${CUCO_INCLUDE_DIR}
     ${CCCL_INCLUDE_DIRS}
 )
