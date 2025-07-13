@@ -2,6 +2,7 @@
 #include "macros.hpp"
 #include <cuda_runtime.h>
 #include "constant_broadcaster.hpp"
+#include "kernel_launch.hpp"
 #include <vector>
 #include <cfloat>
 #include <iostream>
