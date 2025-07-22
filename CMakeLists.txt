@@ -22,11 +22,9 @@ find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
 add_library(voxel_mapping SHARED
-  src/voxel_mapping.cpp
-  src/constant_broadcaster.cu
-  src/insertion.cu
-  src/extraction.cu
-  src/hash_map.cu
+  src/voxel_mapping.cu
+  src/update_generator.cu
+  src/gpu_hash_map.cu
 )
 
 target_link_libraries(voxel_mapping
