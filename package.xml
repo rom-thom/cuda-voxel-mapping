@@ -9,7 +9,6 @@
 
   <buildtool_depend>cmake</buildtool_depend>
 
-  <depend>eigen</depend>
   <depend>spdlog</depend>
   <depend>fmt</depend>
 

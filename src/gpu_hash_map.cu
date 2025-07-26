@@ -81,10 +81,6 @@ GpuHashMap::GpuHashMap(size_t capacity, VoxelType log_odds_occupied, VoxelType l
 
 GpuHashMap::~GpuHashMap() = default;
 
-ChunkMap* GpuHashMap::get_map() {
-    return d_voxel_map_.get();
-}
-
 __device__ inline ChunkPtr allocate_chunk_from_pool(
     ChunkPtr* freelist, uint32_t* counter, uint32_t freelist_capacity) {
     uint32_t index = *((volatile uint32_t*)counter);

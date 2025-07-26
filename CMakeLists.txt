@@ -17,7 +17,6 @@ set(CUCO_INCLUDE_DIR
 )
 
 find_package(CUDAToolkit REQUIRED)
-find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
@@ -28,8 +27,6 @@ add_library(voxel_mapping SHARED
 )
 
 target_link_libraries(voxel_mapping
-  PUBLIC
-    Eigen3::Eigen
   PRIVATE
     CUDA::cudart
     spdlog::spdlog
@@ -40,7 +37,6 @@ target_include_directories(voxel_mapping
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
-    ${EIGEN3_INCLUDE_DIRS}
     PRIVATE
     ${CUCO_INCLUDE_DIR}
     ${CCCL_INCLUDE_DIRS}

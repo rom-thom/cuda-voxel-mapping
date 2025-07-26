@@ -22,6 +22,25 @@ struct AABB {
     Vec3i size;
 };
 
+/// @brief A simple 3D float vector.
+struct Vec3f {
+    float x, y, z;
+};
+
+/// @brief Four points representing a frustum plane.
+struct FrustumPlane {
+    Vec3f tl, tr, bl, br;
+};
+
+/// @brief Frustum structure representing a view frustum in 3D space.
+/// @struct Frustum
+/// @param near_plane The near plane of the frustum, defined by four points in world coordinates.
+/// @param far_plane The far plane of the frustum, defined by four points in world coordinates.
+struct Frustum {
+    FrustumPlane near_plane;
+    FrustumPlane far_plane;
+};
+
 } // namespace voxel_mapping
 
 #endif // TYPES_HPP

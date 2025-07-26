@@ -110,6 +110,20 @@ FrustumBounds UpdateGenerator::get_frustum_world_bounds(const float* transform){
         float wy = transform[tf_index::basis_xy()] * p_cam.x + transform[tf_index::basis_yy()] * p_cam.y + transform[tf_index::basis_zy()] * p_cam.z + transform[tf_index::t_y()];
         float wz = transform[tf_index::basis_xz()] * p_cam.x + transform[tf_index::basis_yz()] * p_cam.y + transform[tf_index::basis_zz()] * p_cam.z + transform[tf_index::t_z()];
     
+        voxel_mapping::Vec3f world_corner = {wx, wy, wz};
+        
+        switch (i) {
+            case 0: frustum_.near_plane.bl = world_corner; break;
+            case 1: frustum_.near_plane.br = world_corner; break;
+            case 2: frustum_.near_plane.tr = world_corner; break;
+            case 3: frustum_.near_plane.tl = world_corner; break;
+
+            case 4: frustum_.far_plane.bl = world_corner; break;
+            case 5: frustum_.far_plane.br = world_corner; break;
+            case 6: frustum_.far_plane.tr = world_corner; break;
+            case 7: frustum_.far_plane.tl = world_corner; break;
+        }
+
         bounds.min_frustum_corner.x = std::min(bounds.min_frustum_corner.x, wx);
         bounds.min_frustum_corner.y = std::min(bounds.min_frustum_corner.y, wy);
         bounds.min_frustum_corner.z = std::min(bounds.min_frustum_corner.z, wz);

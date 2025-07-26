@@ -102,7 +102,7 @@ std::vector<VoxelType> VoxelMapping::get_3d_block(const AABB& aabb) {
     return pimpl_->extract_grid_block(aabb);
 }
 
-AABB VoxelMapping::get_current_aabb() {
+AABB VoxelMapping::get_current_aabb() const {
     AABB aabb;
     int3 min_corner = pimpl_->update_generator_->get_aabb_min_index();
     int3 size = pimpl_->update_generator_->get_aabb_size();
@@ -111,6 +111,10 @@ AABB VoxelMapping::get_current_aabb() {
     aabb.min_corner_index = min_corner_index;
     aabb.size = aabb_size;
     return aabb;
+}
+
+Frustum VoxelMapping::get_frustum() const {
+    return pimpl_->update_generator_->get_frustum();
 }
 
 } // namespace voxel_mapping

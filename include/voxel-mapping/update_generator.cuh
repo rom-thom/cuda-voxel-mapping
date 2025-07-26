@@ -8,6 +8,13 @@ namespace voxel_mapping {
 
 class UpdateGenerator {
 public:
+
+    /**
+     * @brief Constructs an UpdateGenerator responsible for performing raycasting and generating updates for the AABB.
+     * @param voxel_resolution The resolution of the voxels in meters.
+     * @param min_depth The minimum depth value to consider for updates.
+     * @param max_depth The maximum depth value to consider for updates.
+     */
     UpdateGenerator(float voxel_resolution, float min_depth, float max_depth);
     ~UpdateGenerator();
 
@@ -55,6 +62,10 @@ public:
      */
     int3 get_aabb_size() const {
         return aabb_current_size_;
+    }
+
+    Frustum get_frustum() const {
+        return frustum_;
     }
 
 private:
@@ -108,6 +119,7 @@ private:
     int3 aabb_min_index_ = {0, 0, 0};
     int3 aabb_current_size_ = {0, 0, 0};
     int3 aabb_max_size_ = {0, 0, 0};
+    Frustum frustum_;
 };
 
 } // namespace voxel_mapping

@@ -65,7 +65,15 @@ public:
      * - min_corner_index: A vector containing the minimum index {x, y, z} of the AABB in world coordinates.
      * - aabb_size: A vector containing the size {x, y, z} of the AABB in grid coordinates.
      */
-    AABB get_current_aabb();
+    AABB get_current_aabb() const;
+
+    /**
+     * @brief Returns the current frustum of the camera.
+     * @return A Frustum struct containing:
+     * - near_plane: The near plane of the frustum, defined by four points in world coordinates.
+     * - far_plane: The far plane of the frustum, defined by four points in world coordinates.
+     */
+    Frustum get_frustum() const;
 
     // void extract_slice(const Eigen::VectorXi& indices, std::vector<float>& slice);
 
