@@ -1,30 +1,10 @@
 #include "macros.hpp"
 #include <cfloat>
 
-static __constant__ float d_intrinsics[4];
-static __constant__ uint d_image_width;
-static __constant__ uint d_image_height;
-static __constant__ uint d_grid_size_x;
-static __constant__ uint d_grid_size_y;
-static __constant__ uint d_grid_size_z;
-static __constant__ float d_resolution;
-static __constant__ float d_min_depth;
-static __constant__ float d_max_depth;
-static __constant__ float d_log_odds_occupied;
-static __constant__ float d_log_odds_free;
-static __constant__ float d_log_odds_min;
-static __constant__ float d_log_odds_max;
 static __constant__ float d_occupancy_threshold;
 static __constant__ float d_free_threshold;
 
-extern "C" void set_extraction_intrinsics_d(const float* intrinsics) {
-    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_intrinsics, intrinsics, 4 * sizeof(float), 0, cudaMemcpyHostToDevice));
-}
 
-extern "C" void set_extraction_image_size_d(uint width, uint height) {
-    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_image_width, &width, sizeof(uint), 0, cudaMemcpyHostToDevice));
-    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_image_height, &height, sizeof(uint), 0, cudaMemcpyHostToDevice));
-}
 
 extern "C" void set_extraction_grid_constants_d(uint grid_size_x, uint grid_size_y, uint grid_size_z, float resolution) {
     CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_grid_size_x, &grid_size_x, sizeof(uint), 0, cudaMemcpyHostToDevice));

@@ -279,6 +279,7 @@ __global__ void extract_block_kernel(
         active_mask &= ~processed_mask;
     }
 }
+
 void GpuHashMap::extract_block_from_map(VoxelType* d_output_block, const AABB& aabb) {
 
     int min_x = aabb.min_corner_index.x;

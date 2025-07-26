@@ -75,11 +75,17 @@ public:
      */
     Frustum get_frustum() const;
 
+    /**
+     * @brief Extracts the Euclidean Signed Distance Field (ESDF) for a given AABB slice.
+     * @param aabb_slice The AABB defining the region to extract the ESDF.
+     * @param esdf_slice Output vector to store the extracted ESDF values.
+     */
+    void extract_esdf_slice(const AABB& aabb_slice, std::vector<int>& esdf_slice);
+
     // void extract_slice(const Eigen::VectorXi& indices, std::vector<float>& slice);
 
     // void extract_dilated_slice(const Eigen::VectorXi& indices, std::vector<float>& slice, int radius);
 
-    // void extract_esdf(const Eigen::VectorXi& indices, std::vector<float>& esdf);
     
 private:
     class VoxelMappingImpl;
