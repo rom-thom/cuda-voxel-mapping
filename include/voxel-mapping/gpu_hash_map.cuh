@@ -2,8 +2,11 @@
 #define GPU_HASH_MAP_CUH
 
 #include <cuco/static_map.cuh>
+#include <voxel-mapping/types.hpp>
 #include "voxel-mapping/internal_types.cuh"
 #include <memory>
+
+namespace voxel_mapping {
 
 class GpuHashMap {
     public:
@@ -19,22 +22,21 @@ class GpuHashMap {
         ChunkMap* get_map();
 
         void launch_map_update_kernel(
-            uint32_t num_updates,
-            const VoxelUpdate* update_list,
+            AABBUpdate aabb_update,
             cudaStream_t stream);
 
-        std::vector<VoxelType> extract_grid_block(const VoxelType* aabb_indices);
+        void extract_block_from_map(VoxelType* d_output_block, const AABB& aabb);
 
     private:
 
         std::unique_ptr<ChunkMap> d_voxel_map_;
-        size_t map_capacity_;
         VoxelType* global_memory_pool_ = nullptr;
         ChunkPtr* freelist_ = nullptr;
         uint32_t* freelist_counter_ = nullptr;
-        uint32_t* freelist_allocation_counter_ = nullptr;
-        uint32_t* freelist_capacity_ = nullptr;
-
+        uint32_t freelist_capacity_ = 0;
+        size_t map_capacity_ = 0;
 };
+
+} // namespace voxel_mapping
 
 #endif // GPU_HASH_MAP_CUH

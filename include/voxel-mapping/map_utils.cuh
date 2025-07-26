@@ -3,20 +3,14 @@
 
 #include "voxel-mapping/internal_types.cuh"
 
+namespace voxel_mapping {
+
 /**
  * @brief Defines the default initial value for a voxel.
  * This is used to represent an unknown state.
  */
 inline constexpr __device__ VoxelType default_voxel_value() {
     return 0;
-}
-
-/**
- * @brief Defines the value for flagged voxels.
- * This is used to indicate that a voxel has already been updated.
- */
-inline constexpr __device__ VoxelFlag voxel_flag_value() {
-    return 1u;
 }
 
 /**
@@ -58,10 +52,15 @@ __device__ inline int positive_modulo(int i, int n) {
 /**
  * @brief Packs three int indices into a single uint64_t key.
  * This is used to create a unique identifier for a chunk based on its coordinates.
+ * Applies a mask to handle negative indices with two's complement representation.
+ * This supports indices in the range of -2097152 to 2097151, which fits within the 21 bits used for each coordinate.
  */
 __device__ inline uint64_t pack_indices_to_key(int chunk_ix, int chunk_iy, int chunk_iz) {
-    // Valid for chunk ids in ranging from -1,048,576 to +1,048,575
-    return (static_cast<uint64_t>(chunk_ix) << 42) | (static_cast<uint64_t>(chunk_iy) << 21) | static_cast<uint64_t>(chunk_iz);
+    constexpr uint64_t MASK = 0x1FFFFF;
+
+    return ((static_cast<uint64_t>(chunk_ix) & MASK) << 42) |
+           ((static_cast<uint64_t>(chunk_iy) & MASK) << 21) |
+            (static_cast<uint64_t>(chunk_iz) & MASK);
 }
 
 /**
@@ -102,5 +101,7 @@ __device__ inline uint32_t get_intra_chunk_index(int global_x, int global_y, int
 __device__ inline uint32_t block_1d_index(int tx, int ty, int tz, int size_x, int size_y) {
     return (tz * size_y * size_x) + (ty * size_x) + tx;
 }
+
+} // namespace voxel_mapping
 
 #endif // MAP_UTILS_CUH
