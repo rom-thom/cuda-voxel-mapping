@@ -10,37 +10,52 @@ namespace voxel_mapping {
 /// @brief Unique identifier for a voxel chunk, represented as a 64-bit unsigned integer.
 using ChunkKey = uint64_t;
 
-
 /// @brief Pointer to the first voxel in a chunk, represented as a pointer to VoxelType.
 using ChunkPtr = VoxelType*;
 
 /// @brief Defines the type of update to be applied to a voxel.
 enum class UpdateType : uint8_t {
-    Unknown,  ///< The voxel state has not been determined, do nothing.
+    Unknown,  ///< Default value for initialized voxels. Represents no update.
     Free,     ///< The voxel is part of free space (ray passed through it).
     Occupied, ///< The voxel is occupied by a surface.
 };
 
-/// @brief Structure representing an update to an axis-aligned bounding box (AABB) region.
-/// @struct AABBUpdate
-/// @param d_aabb_grid Device pointer to the grid of update types for the AABB.
-/// @param aabb_min_index Minimum index (corner) of the AABB in 3D grid coordinates.
-/// @param aabb_current_size Current size of the AABB in grid units.
+/**
+ * @brief Represents an update to an axis-aligned bounding box (AABB) region.
+ */
 struct AABBUpdate {
+    ///< Device pointer to the grid of update types for the AABB.
     UpdateType* d_aabb_grid;
+    ///< Minimum index (corner) of the AABB in 3D grid coordinates.
     int3 aabb_min_index;
+    ///< Current size of the AABB in grid units.
     int3 aabb_current_size; 
 };
 
-/// @brief Structure representing the bounds of a camera frustum in 3D space.
-/// @struct FrustumBounds
-/// @param min_frustum_corner Minimum corner of the frustum in 3D space.
-/// @param max_frustum_corner Maximum corner of the frustum in 3D space.
-/// @param max_near_plane_corner Maximum corner of the near plane of the frustum in 3D space.
+/**
+ * @brief Represents the bounds of a camera frustum in 3D space.
+ */
 struct FrustumBounds {
+    ///< Minimum corner of the frustum in 3D space.
     float3 min_frustum_corner;
+    ///< Maximum corner of the frustum in 3D space.
     float3 max_frustum_corner;
+    ///< Maximum corner of the near plane of the frustum in 3D space.
     float3 max_near_plane_corner;
+};
+
+/**
+ * @brief Represents a chunk in the voxel mapping system for host-side processing.
+ */
+struct ChunkInfo {
+    ///< Unique identifier for the chunk.
+    ChunkKey key;
+    ///< Pointer to the chunk's data on the GPU.
+    ChunkPtr ptr;
+    ///< Cached squared distance to a reference point.
+    float distance_sq;
+    ///< Flag indicating if the chunk's pointer is invalid (unallocated).
+    bool is_invalid;
 };
 
 /// @brief Type alias for a hashmap with {key, value} pairs are {ChunkKey, ChunkPtr}.
@@ -56,7 +71,7 @@ using ChunkMap = cuco::static_map<
 
 /// @brief Type alias for a reference to a ChunkMap.
 /// This reference allows for read and write operations on the ChunkMap.
-using ChunkMapRef = decltype(std::declval<ChunkMap&>().ref(cuco::op::find, cuco::op::insert_and_find));
+using ChunkMapRef = decltype(std::declval<ChunkMap&>().ref(cuco::op::find, cuco::op::insert_and_find, cuco::op::erase));
 
 /// @brief Type alias for a constant reference to a ChunkMap.
 /// This reference allows for read-only operations on the ChunkMap.

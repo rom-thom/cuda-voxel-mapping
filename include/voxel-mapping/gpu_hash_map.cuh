@@ -46,7 +46,61 @@ class GpuHashMap {
          */
         void extract_block_from_map(VoxelType* d_output_block, const AABB& aabb);
 
+        /**
+         * @brief Clears chunks from the hash map that either have an invalid chunk pointer or is far away from the current chunk position.
+         * Clears chunks equal to 10% of the total chunk capacity.
+         * @param current_chunk_pos The current chunk position in 3D grid coordinates.
+         */
+        void clear_chunks(const int3& current_chunk_pos);
+
+        /**
+         * @brief Retrieves the counter for freelist allocations.
+         * This counter indicates how many chunks are currently allocated and used in the hash map.
+         * @param freelist_counter Pointer to a uint32_t variable where the counter will be stored.
+         */
+        void get_freelist_counter(uint32_t* freelist_counter);
+
+        /**
+         * @brief Retrieves the capacity of the freelist (number of chunks).
+         * The freelist is used to manage chunk allocations and deallocations.
+         * @return The capacity of the freelist.
+         */
+        size_t get_freelist_capacity() const {
+            return freelist_capacity_;
+        }
+
     private:
+        /**
+         * @brief Helper function to retrieve all chunks from the hash map.
+         * This function retrieves all chunk keys and their corresponding pointers from the hash map.
+         * @param h_keys Vector to store the chunk keys.
+         * @param h_values Vector to store the chunk pointers.
+         */
+        void retrieve_all_chunks(std::vector<ChunkKey>& h_keys, std::vector<ChunkPtr>& h_values);
+
+        /**
+         * @brief Helper function to prioritize chunks for clearing based on distance from the current chunk position and pointer validity.
+         * This function sorts the chunks by their squared distance to the current chunk position and returns the top N chunks,
+         * prioritizing chunks that have invalid pointers.
+         * @param h_keys Vector of chunk keys.
+         * @param h_values Vector of chunk pointers.
+         * @param current_chunk_pos The current chunk position in 3D grid coordinates.
+         * @return A vector of ChunkInfo containing the prioritized chunks for clearing.
+         */
+        std::vector<ChunkInfo> prioritize_chunks_for_clearing(
+            const std::vector<ChunkKey>& h_keys,
+            const std::vector<ChunkPtr>& h_values,
+            const int3& current_chunk_pos);
+
+        /**
+         * @brief Executes the chunk removal operation by erasing chunks from the hash map,
+         * setting the chunk memory to the default value, and deallocating the chunk pointers by returning them to the freelist.
+         * @param keys_to_erase Vector of chunk keys to erase.
+         * @param ptrs_to_deallocate Vector of chunk pointers to deallocate.
+         */
+        void execute_chunk_removal(
+            const std::vector<ChunkKey>& keys_to_erase,
+            const std::vector<ChunkPtr>& ptrs_to_deallocate);
 
         std::unique_ptr<ChunkMap> d_voxel_map_;
         VoxelType* global_memory_pool_ = nullptr;

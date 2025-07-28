@@ -8,22 +8,44 @@
 
 namespace voxel_mapping {
 
+/**
+ * @brief Holds all configuration parameters for the VoxelMapping class.
+ */
+struct VoxelMappingParams {
+    /// @brief The number of voxel chunks to pre-allocate memory for.
+    size_t chunk_capacity;
+    /// @brief The resolution of the voxel grid in meters per voxel.
+    float resolution;
+    /// @brief The minimum depth for processing insertions from a depth image.
+    float min_depth;
+    /// @brief The maximum depth for processing insertions from a depth image.
+    float max_depth;
+    /// @brief Log-odds update value for occupied voxels.
+    VoxelType log_odds_occupied;
+    /// @brief Log-odds update value for free voxels.
+    VoxelType log_odds_free;
+    /// @brief Clamped minimum log-odds value for any voxel.
+    VoxelType log_odds_min;
+    /// @brief Clamped maximum log-odds value for any voxel.
+    VoxelType log_odds_max;
+    /// @brief Log-odds value above which a voxel is considered occupied.
+    VoxelType occupancy_threshold;
+    /// @brief Log-odds value below which a voxel is considered free.
+    VoxelType free_threshold;
+};
+
+/**
+ * @brief VoxelMapping is the main interface for voxel mapping operations.
+ * It provides methods to set camera properties, integrate depth images, extract voxel blocks,
+ * and manage the voxel map's state.
+ */
 class VoxelMapping {
 public:
     /**
      * @brief Constructs a VoxelMapping object that acts as the interface to mapping operations.
-     * @param map_chunk_capacity The number of voxel chunks to allocate memory for.
-     * @param resolution The resolution of the voxel grid.
-     * @param min_depth The minimum depth value for insertions from the depth image.
-     * @param max_depth The maximum depth value for insertions from the depth image.
-     * @param log_odds_occupied Log-odds update value for occupied voxels.
-     * @param log_odds_free Log-odds update value for free voxels.
-     * @param log_odds_min Clamped minimum log-odds value for voxels.
-     * @param log_odds_max Clamped maximum log-odds value for voxels.
-     * @param occupancy_threshold Threshold for occupancy to consider a voxel occupied.
-     * @param free_threshold Threshold for occupancy to consider a voxel free.
+     * @param params A struct containing all configuration parameters for the map.
      */
-    VoxelMapping(size_t map_chunk_capacity, float resolution, float min_depth, float max_depth, VoxelType log_odds_occupied, VoxelType log_odds_free, VoxelType log_odds_min, VoxelType log_odds_max, VoxelType occupancy_threshold, VoxelType free_threshold);
+    VoxelMapping(const VoxelMappingParams& params);
     
     ~VoxelMapping();
 
@@ -84,8 +106,10 @@ public:
 
     // void extract_slice(const Eigen::VectorXi& indices, std::vector<float>& slice);
 
-    // void extract_dilated_slice(const Eigen::VectorXi& indices, std::vector<float>& slice, int radius);
-
+    /**
+     * @brief Checks if the memory pool is nearing capacity and, if so, clears distant and invalid chunks.
+     */
+    void query_free_chunk_capacity();
     
 private:
     class VoxelMappingImpl;

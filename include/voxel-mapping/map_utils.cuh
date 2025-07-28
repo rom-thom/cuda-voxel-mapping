@@ -15,7 +15,7 @@ inline constexpr __device__ VoxelType default_voxel_value() {
 
 /**
  * @brief Returns an invalid chunk pointer.
- * This is used to indicate that a chunk pointer is not valid.
+ * This is used to indicate that a chunk pointer value in the hash map is not valid.
  */
 inline __device__ __host__ ChunkPtr invalid_chunk_ptr() {
     return reinterpret_cast<ChunkPtr>(0xFFFFFFFFFFFFFFFF);
@@ -33,7 +33,7 @@ inline constexpr __device__ __host__ uint32_t chunk_dim() {
  * @brief Performs integer division that correctly handles negative numbers (rounds towards negative infinity).
  * Standard C++ integer division truncates towards zero, which is incorrect for this use case.
  */
-__device__ inline int floor_div(int a, int n) {
+inline __host__ __device__ int floor_div(int a, int n) {
     int r = a / n;
     if ((a % n) != 0 && (a * n) < 0) {
         r--;
@@ -61,6 +61,39 @@ __device__ inline uint64_t pack_indices_to_key(int chunk_ix, int chunk_iy, int c
     return ((static_cast<uint64_t>(chunk_ix) & MASK) << 42) |
            ((static_cast<uint64_t>(chunk_iy) & MASK) << 21) |
             (static_cast<uint64_t>(chunk_iz) & MASK);
+}
+
+/**
+ * @brief Unpacks a ChunkKey into its corresponding indices.
+ * This is used to retrieve the original chunk coordinates from the packed key.
+ * Handles negative indices by extending the sign bit.
+ */
+inline __host__ __device__ int3 unpack_key_to_indices(ChunkKey key) {
+    constexpr uint64_t MASK = 0x1FFFFF;
+    constexpr int BITS = 21;
+    constexpr uint64_t SIGN_BIT = 1ULL << (BITS - 1); 
+
+    int3 indices;
+
+    int ix = (key >> 42) & MASK;
+    if (ix & SIGN_BIT) {
+        ix |= ~MASK;
+    }
+    indices.x = ix;
+
+    int iy = (key >> 21) & MASK;
+    if (iy & SIGN_BIT) {
+        iy |= ~MASK;
+    }
+    indices.y = iy;
+
+    int iz = key & MASK;
+    if (iz & SIGN_BIT) {
+        iz |= ~MASK;
+    }
+    indices.z = iz;
+    
+    return indices;
 }
 
 /**

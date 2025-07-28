@@ -64,8 +64,20 @@ public:
         return aabb_current_size_;
     }
 
+    /**
+     * @brief Get the frustum of the camera in world coordinates.
+     * @return A Frustum object containing the near and far planes of the camera frustum.
+     */
     Frustum get_frustum() const {
         return frustum_;
+    }
+
+    /**
+     * @brief Get the current chunk position in world coordinates.
+     * @return An int3 containing the current chunk position {x, y, z}.
+     */
+    int3 get_current_chunk_position() const {
+        return current_chunk_pos_;
     }
 
 private:
@@ -101,6 +113,14 @@ private:
      */
     void set_aabb_origin_index_and_size(FrustumBounds frustum_bounds);
 
+    /**
+     * @brief Sets the current chunk position based on the provided transformation matrix.
+     * The chunk position is calculated by flooring the translation components of the transformation
+     * divided by the voxel resolution.
+     * @param transform Pointer to the transformation matrix in host memory.
+     */
+    void set_current_chunk_position(const float* transform);
+
     float voxel_resolution_;
     float min_depth_;
     float max_depth_;
@@ -120,6 +140,7 @@ private:
     int3 aabb_current_size_ = {0, 0, 0};
     int3 aabb_max_size_ = {0, 0, 0};
     Frustum frustum_;
+    int3 current_chunk_pos_ = {0, 0, 0};
 };
 
 } // namespace voxel_mapping

@@ -20,19 +20,19 @@ public:
     std::unique_ptr<UpdateGenerator> update_generator_;
     std::unique_ptr<GridProcessor> grid_processor_;
 
-    VoxelMappingImpl(size_t map_chunk_capacity, float resolution, float min_depth, float max_depth, VoxelType log_odds_occupied, VoxelType log_odds_free, VoxelType log_odds_min, VoxelType log_odds_max, VoxelType occupancy_threshold, VoxelType free_threshold)
-        : resolution_(resolution)
+    VoxelMappingImpl(const VoxelMappingParams& params)
+        : resolution_(params.resolution)
     {
-        if (resolution <= 0) {
+        if (resolution_ <= 0) {
             throw std::invalid_argument("Resolution must be positive");
         }
         CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
-        voxel_map_ = std::make_unique<GpuHashMap>(map_chunk_capacity, log_odds_occupied, log_odds_free, log_odds_min, log_odds_max, occupancy_threshold, free_threshold);
-        spdlog::info("Voxel map initialized on GPU with initial capacity {}", map_chunk_capacity);
-        update_generator_ = std::make_unique<UpdateGenerator>(resolution_, min_depth, max_depth);
-        spdlog::info("Update generator initialized with resolution: {}, min_depth: {}, max_depth: {}", resolution_, min_depth, max_depth);
-        grid_processor_ = std::make_unique<GridProcessor>(occupancy_threshold, free_threshold);
-        spdlog::info("Grid processor initialized with occupancy threshold: {}, free threshold: {}", occupancy_threshold, free_threshold);
+        voxel_map_ = std::make_unique<GpuHashMap>(params.chunk_capacity, params.log_odds_occupied, params.log_odds_free, params.log_odds_min, params.log_odds_max, params.occupancy_threshold, params.free_threshold);
+        spdlog::info("Voxel map initialized on GPU with initial capacity {}", params.chunk_capacity);
+        update_generator_ = std::make_unique<UpdateGenerator>(resolution_, params.min_depth, params.max_depth);
+        spdlog::info("Update generator initialized with resolution: {}, min_depth: {}, max_depth: {}", resolution_, params.min_depth, params.max_depth);
+        grid_processor_ = std::make_unique<GridProcessor>(params.occupancy_threshold, params.free_threshold);
+        spdlog::info("Grid processor initialized with occupancy threshold: {}, free threshold: {}", params.occupancy_threshold, params.free_threshold);
     }
 
     ~VoxelMappingImpl() {
@@ -90,16 +90,16 @@ public:
         size_t total_elements = aabb_size_x * aabb_size_y * aabb_size_z;
         size_t slice_size = aabb_size_x * aabb_size_y;
 
-        VoxelType* d_aabb;
-        CHECK_CUDA_ERROR(cudaMalloc(&d_aabb, total_elements * sizeof(VoxelType)));
+        VoxelType* d_block;
+        CHECK_CUDA_ERROR(cudaMalloc(&d_block, total_elements * sizeof(VoxelType)));
 
-        voxel_map_->extract_block_from_map(d_aabb, aabb_slice);
+        voxel_map_->extract_block_from_map(d_block, aabb_slice);
 
         int* d_binary_slice;
         CHECK_CUDA_ERROR(cudaMalloc(&d_binary_slice, slice_size * sizeof(int)));
 
         grid_processor_->launch_extract_binary_slice_kernel(
-            d_aabb,
+            d_block,
             d_binary_slice,
             aabb_slice.min_corner_index.x,
             aabb_slice.min_corner_index.y,
@@ -128,13 +128,32 @@ public:
             slice_size * sizeof(int),
             cudaMemcpyDeviceToHost
         ));
+
+        CHECK_CUDA_ERROR(cudaFree(d_block));
+        CHECK_CUDA_ERROR(cudaFree(d_binary_slice));
+        CHECK_CUDA_ERROR(cudaFree(d_esdf_slice));
+    }
+
+    void query_free_chunk_capacity() {
+        uint32_t current_freelist_count;
+        voxel_map_->get_freelist_counter(&current_freelist_count);
+        size_t freelist_capacity = voxel_map_->get_freelist_capacity();
+        uint32_t threshold = static_cast<uint32_t>(freelist_capacity * 0.95);
+
+        if (current_freelist_count >= threshold) {
+            int3 current_chunk_pos = update_generator_->get_current_chunk_position();
+            
+            spdlog::info("Freelist usage ({}) is above 95% threshold ({}). Clearing distant chunks.", 
+                         current_freelist_count, threshold);
+
+            voxel_map_->clear_chunks(current_chunk_pos);
+        }
     }
 
 };
 
-VoxelMapping::VoxelMapping(size_t map_update_capacity, float resolution, float min_depth, float max_depth, VoxelType log_odds_occupied, VoxelType log_odds_free, VoxelType log_odds_min, VoxelType log_odds_max, VoxelType occupancy_threshold, VoxelType free_threshold)
-: pimpl_(std::make_unique<VoxelMappingImpl>(map_update_capacity, resolution, min_depth, max_depth, log_odds_occupied, log_odds_free, log_odds_min, log_odds_max, occupancy_threshold, free_threshold))
-{
+VoxelMapping::VoxelMapping(const VoxelMappingParams& params)
+    : pimpl_(std::make_unique<VoxelMappingImpl>(params)) {
 }
 
 VoxelMapping::~VoxelMapping() = default;
@@ -148,6 +167,10 @@ void VoxelMapping::integrate_depth(const float* depth_image, const float* transf
 
 void VoxelMapping::set_camera_properties(float fx, float fy, float cx, float cy, uint32_t width, uint32_t height) {
     pimpl_->update_generator_->set_camera_properties(fx, fy, cx, cy, width, height);
+}
+
+void VoxelMapping::query_free_chunk_capacity() {
+    pimpl_->query_free_chunk_capacity();
 }
 
 std::vector<VoxelType> VoxelMapping::get_3d_block(const AABB& aabb) {

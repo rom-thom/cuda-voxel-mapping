@@ -75,6 +75,17 @@ void UpdateGenerator::set_camera_properties(
 void UpdateGenerator::compute_active_aabb(const float* transform) {
     FrustumBounds frustum_bounds = get_frustum_world_bounds(transform);
     set_aabb_origin_index_and_size(frustum_bounds);
+    set_current_chunk_position(transform);
+}
+
+void UpdateGenerator::set_current_chunk_position(const float* transform) {
+    int global_vx = static_cast<int>(std::floor(transform[tf_index::t_x()] / voxel_resolution_));
+    int global_vy = static_cast<int>(std::floor(transform[tf_index::t_y()] / voxel_resolution_));
+    int global_vz = static_cast<int>(std::floor(transform[tf_index::t_z()] / voxel_resolution_));
+
+    current_chunk_pos_.x = floor_div(global_vx, chunk_dim());
+    current_chunk_pos_.y = floor_div(global_vy, chunk_dim());
+    current_chunk_pos_.z = floor_div(global_vz, chunk_dim());
 }
 
 FrustumBounds UpdateGenerator::get_frustum_world_bounds(const float* transform){
