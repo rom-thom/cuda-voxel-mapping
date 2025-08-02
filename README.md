@@ -1,3 +1,19 @@
+# Voxel Mapping
+Voxel Mapping is a CUDA-accelerated library for generating 3D environment representations for navigation and collision avoidance.
+
+![Voxel Mapping Demo](docs/pool_df.gif)
+
+This package uses a device side hash map for sparse mapping of pre allocated voxel-chunks. The API functions are available in `include/voxel_mapping.hpp` and custum types are defined in `include/types.hpp`
+
+
+# Key Features
+
+- **Fully CUDA-Accelerated:** All core operation like map-insertion, distance field calculation, and data extraction are executed entirely on the GPU.
+- **Sparse Chunk Mapping:** Uses a device-side hash map (`cuCollections::static_map`) for chunk based spatial hashing.
+- **On-the-Fly Distance Fields:** Generates Euclidean Distance Transforms (EDT) using optimized CUDA kernels for fast collision checking.
+- **Flexible Data Extraction:** Supports highly efficient extraction of both full 3D blocks and multiple non-contiguous 2D slices.
+- **Raycasting Kernel for Sensor Updates:** Integrates a fast, parallelized raycasting kernel to efficiently update the voxel map with new sensor data, enabling real-time integration of depth measurements.
+
 # Dependencies
 
 The `voxel_mapping` package internally depends on **cuCollections** (a GPU-accelerated concurrent data structures library) and **CCCL** (CUDA C++ Core Libraries). Due to these dependencies, `voxel_mapping` and any package that uses it inherit specific system requirements.
@@ -7,7 +23,6 @@ When building `voxel_mapping` or any package that links against it, ensure your 
 - **NVCC (NVIDIA CUDA Compiler):** 12.0 or newer  
 - **C++ Standard:** C++17  
 - **GPU Architecture:** Volta (Compute Capability 7.0) or newer  
-- **CMake:** 3.30.4 or newer
 
 # Using the `voxel_mapping` Library in a ROS 2 Package
 
