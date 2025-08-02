@@ -1,6 +1,7 @@
 #include "voxel-mapping/gpu_hash_map.cuh"
 #include "voxel-mapping/host_macros.hpp"
 #include "voxel-mapping/map_utils.cuh"
+#include "voxel-mapping/types.hpp"
 #include "voxel-mapping/internal_types.cuh"
 #include <thrust/device_vector.h>
 #include <thrust/copy.h>
@@ -223,84 +224,6 @@ void GpuHashMap::launch_map_update_kernel(
             aabb_size);
             CHECK_CUDA_ERROR(cudaGetLastError());
         }
-            
-__global__ void extract_block_kernel(
-    ConstChunkMapRef map_ref,
-    VoxelType* d_output_block,
-    int min_x, int min_y, int min_z,
-    int size_x, int size_y, int size_z)
-    {
-    auto group = cooperative_groups::tiled_partition<32>(cooperative_groups::this_thread_block());
-    
-    int aabb_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int aabb_y = blockIdx.y * blockDim.y + threadIdx.y;
-    int aabb_z = blockIdx.z;
-    
-    bool is_in_bounds = (aabb_x < size_x && aabb_y < size_y && aabb_z < size_z);
-    
-    ChunkKey my_key = 0;
-    uint32_t output_idx = 0;
-    
-    if (is_in_bounds) {
-        int global_x = min_x + aabb_x;
-        int global_y = min_y + aabb_y;
-        int global_z = min_z + aabb_z;
-        
-        my_key = get_chunk_key(global_x, global_y, global_z);
-        output_idx = block_1d_index(aabb_x, aabb_y, aabb_z, size_x, size_y);
-    }
-    
-    unsigned int active_mask = group.ballot(is_in_bounds);
-    
-    while(active_mask != 0) {
-        int leader_lane = __ffs(active_mask) - 1;
-        ChunkKey current_key = group.shfl(my_key, leader_lane);
-        
-        auto it = map_ref.find(group, current_key);
-        
-        
-        if (my_key == current_key) {
-            if (it != map_ref.end() && it->second != invalid_chunk_ptr() && it->second != nullptr) {
-                int global_x = min_x + aabb_x;
-                int global_y = min_y + aabb_y;
-                int global_z = min_z + aabb_z;
-                uint32_t intra_chunk_idx = get_intra_chunk_index(global_x, global_y, global_z);
-                d_output_block[output_idx] = it->second[intra_chunk_idx];
-            } else {
-                d_output_block[output_idx] = default_voxel_value();
-            }
-        }
-        unsigned int processed_mask = group.ballot(my_key == current_key);
-        active_mask &= ~processed_mask;
-    }
-}
-                
-void GpuHashMap::extract_block_from_map(VoxelType* d_output_block, const AABB& aabb) {
-    
-    int min_x = aabb.min_corner_index.x;
-    int min_y = aabb.min_corner_index.y;
-    int min_z = aabb.min_corner_index.z;
-    int aabb_size_x = aabb.size.x;
-    int aabb_size_y = aabb.size.y;
-    int aabb_size_z = aabb.size.z;
-    
-    dim3 block_dim(32, 8, 1);
-    dim3 grid_dim(
-        (aabb_size_x + block_dim.x - 1) / block_dim.x,
-        (aabb_size_y + block_dim.y - 1) / block_dim.y,
-        (aabb_size_z + block_dim.z - 1) / block_dim.z
-    );
-    
-    auto map_ref = d_voxel_map_->ref(cuco::op::find);
-    
-    extract_block_kernel<<<grid_dim, block_dim>>>(
-        map_ref,
-        d_output_block,
-        min_x, min_y, min_z,
-        aabb_size_x, aabb_size_y,
-        aabb_size_z
-    );
-}
 
 void GpuHashMap::clear_chunks(const int3& current_chunk_pos) {
     std::vector<ChunkKey> h_keys;

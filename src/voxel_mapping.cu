@@ -9,19 +9,21 @@
 #include <spdlog/spdlog.h>
 #include "voxel-mapping/update_generator.cuh"
 #include "voxel-mapping/grid_processor.cuh"
+#include "voxel-mapping/map_utils.cuh"
 
 namespace voxel_mapping {
 
 class VoxelMapping::VoxelMappingImpl {
 public:
     float resolution_;
+    int occupancy_threshold_;
     cudaStream_t stream_ = nullptr;
     std::unique_ptr<GpuHashMap> voxel_map_;
     std::unique_ptr<UpdateGenerator> update_generator_;
     std::unique_ptr<GridProcessor> grid_processor_;
 
     VoxelMappingImpl(const VoxelMappingParams& params)
-        : resolution_(params.resolution)
+        : resolution_(params.resolution), occupancy_threshold_(params.occupancy_threshold)
     {
         if (resolution_ <= 0) {
             throw std::invalid_argument("Resolution must be positive");
@@ -31,8 +33,8 @@ public:
         spdlog::info("Voxel map initialized on GPU with initial capacity {}", params.chunk_capacity);
         update_generator_ = std::make_unique<UpdateGenerator>(resolution_, params.min_depth, params.max_depth);
         spdlog::info("Update generator initialized with resolution: {}, min_depth: {}, max_depth: {}", resolution_, params.min_depth, params.max_depth);
-        grid_processor_ = std::make_unique<GridProcessor>(params.occupancy_threshold, params.free_threshold);
-        spdlog::info("Grid processor initialized with occupancy threshold: {}, free threshold: {}", params.occupancy_threshold, params.free_threshold);
+        grid_processor_ = std::make_unique<GridProcessor>(params.occupancy_threshold, params.free_threshold, params.edt_max_distance);
+        spdlog::info("Grid processor initialized with occupancy threshold: {}, free threshold: {}, EDT max distance: {}", params.occupancy_threshold, params.free_threshold, params.edt_max_distance);
     }
 
     ~VoxelMappingImpl() {
@@ -57,81 +59,99 @@ public:
         CHECK_CUDA_ERROR(cudaGetLastError());
     }
 
-    std::vector<VoxelType> extract_grid_block(const AABB& aabb) {
-        int aabb_size_x = aabb.size.x;
-        int aabb_size_y = aabb.size.y;
-        int aabb_size_z = aabb.size.z;
+    template <ExtractionType Type>
+    std::vector<VoxelType> extract_grid_data(const AABB& aabb, const SliceZIndices& slice_indices) {
+        const int aabb_size_x = aabb.size.x;
+        const int aabb_size_y = aabb.size.y;
         
-        size_t total_elements = aabb_size_x * aabb_size_y * aabb_size_z;
+        int num_z_layers;
+        if constexpr (Type == ExtractionType::Block) {
+            num_z_layers = aabb.size.z;
+        } else {
+            num_z_layers = slice_indices.count;
+        }
 
-        std::vector<VoxelType> h_block(total_elements);
-        VoxelType* d_output_block;
-        CHECK_CUDA_ERROR(cudaMalloc(&d_output_block, total_elements * sizeof(VoxelType)));
+        const size_t total_elements = static_cast<size_t>(aabb_size_x) * aabb_size_y * num_z_layers;
 
-        voxel_map_->extract_block_from_map(d_output_block, aabb);
+        if (total_elements == 0) {
+            return {};
+        }
+
+        std::vector<VoxelType> h_output(total_elements);
+        VoxelType* d_output_buffer;
+        CHECK_CUDA_ERROR(cudaMalloc(&d_output_buffer, total_elements * sizeof(VoxelType)));
+
+        ExtractOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y};
+
+        voxel_map_->launch_map_extraction_kernel<Type>(
+            aabb, 
+            slice_indices, 
+            extract_op
+        );
 
         CHECK_CUDA_ERROR(cudaMemcpy(
-            h_block.data(), 
-            d_output_block, 
+            h_output.data(), 
+            d_output_buffer, 
             total_elements * sizeof(VoxelType),
             cudaMemcpyDeviceToHost
         ));
 
-        CHECK_CUDA_ERROR(cudaFree(d_output_block));
+        CHECK_CUDA_ERROR(cudaFree(d_output_buffer));
         
-        return h_block;
+        return h_output;
     }
 
-    void extract_esdf_slice(const AABB& aabb_slice, std::vector<int>& esdf_slice) {
-        int aabb_size_x = aabb_slice.size.x;
-        int aabb_size_y = aabb_slice.size.y;
-        int aabb_size_z = aabb_slice.size.z;
+    template <ExtractionType Type>
+    std::vector<int> extract_edt_data(const AABB& aabb, const SliceZIndices& slice_indices) {
+        const int aabb_size_x = aabb.size.x;
+        const int aabb_size_y = aabb.size.y;
+        
+        int num_z_layers;
+        int max_dim_sq = 0;
+        if constexpr (Type == ExtractionType::Block) {
+            num_z_layers = aabb.size.z;
+            max_dim_sq = std::max({aabb_size_x, aabb_size_y, aabb.size.z});
+            max_dim_sq *= max_dim_sq;
+        } else {
+            num_z_layers = slice_indices.count;
+            max_dim_sq = std::max(aabb_size_x, aabb_size_y);
+            max_dim_sq *= max_dim_sq;
+        }
 
-        size_t total_elements = aabb_size_x * aabb_size_y * aabb_size_z;
-        size_t slice_size = aabb_size_x * aabb_size_y;
+        const size_t total_elements = static_cast<size_t>(aabb_size_x) * aabb_size_y * num_z_layers;
 
-        VoxelType* d_block;
-        CHECK_CUDA_ERROR(cudaMalloc(&d_block, total_elements * sizeof(VoxelType)));
+        if (total_elements == 0) {
+            return {};
+        }
 
-        voxel_map_->extract_block_from_map(d_block, aabb_slice);
+        std::vector<int> h_output(total_elements);
+        int* d_output_buffer;
+        CHECK_CUDA_ERROR(cudaMalloc(&d_output_buffer, total_elements * sizeof(int)));
 
-        int* d_binary_slice;
-        CHECK_CUDA_ERROR(cudaMalloc(&d_binary_slice, slice_size * sizeof(int)));
+        ExtractBinaryOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y, occupancy_threshold_, max_dim_sq};
 
-        grid_processor_->launch_extract_binary_slice_kernel(
-            d_block,
-            d_binary_slice,
-            aabb_slice.min_corner_index.x,
-            aabb_slice.min_corner_index.y,
-            aabb_slice.min_corner_index.z,
-            aabb_size_x,
-            aabb_size_y,
-            aabb_size_z,
-            stream_
-        );
+        voxel_map_->launch_map_extraction_kernel<Type>(aabb, slice_indices, extract_op);
 
-        int* d_esdf_slice;
-        CHECK_CUDA_ERROR(cudaMalloc(&d_esdf_slice, slice_size * sizeof(int)));
+        if constexpr (Type == ExtractionType::Block) {
+            grid_processor_->launch_3d_edt_kernels(
+                d_output_buffer, aabb_size_x, aabb_size_y, num_z_layers, stream_
+            );
+        } else {
+            grid_processor_->launch_edt_slice_kernels(
+                d_output_buffer, aabb_size_x, aabb_size_y, num_z_layers, stream_
+            );
+        }
 
-        grid_processor_->launch_edt_kernels(
-            d_binary_slice,
-            d_esdf_slice,
-            aabb_size_x,
-            aabb_size_y,
-            stream_
-        );
-
-        esdf_slice.resize(slice_size);
         CHECK_CUDA_ERROR(cudaMemcpy(
-            esdf_slice.data(), 
-            d_esdf_slice, 
-            slice_size * sizeof(int),
+            h_output.data(), 
+            d_output_buffer, 
+            total_elements * sizeof(int),
             cudaMemcpyDeviceToHost
         ));
 
-        CHECK_CUDA_ERROR(cudaFree(d_block));
-        CHECK_CUDA_ERROR(cudaFree(d_binary_slice));
-        CHECK_CUDA_ERROR(cudaFree(d_esdf_slice));
+        CHECK_CUDA_ERROR(cudaFree(d_output_buffer));
+        
+        return h_output;
     }
 
     void query_free_chunk_capacity() {
@@ -165,31 +185,32 @@ void VoxelMapping::integrate_depth(const float* depth_image, const float* transf
     pimpl_->integrate_depth(depth_image, transform);
 }
 
-void VoxelMapping::set_camera_properties(float fx, float fy, float cx, float cy, uint32_t width, uint32_t height) {
-    pimpl_->update_generator_->set_camera_properties(fx, fy, cx, cy, width, height);
+std::vector<VoxelType> VoxelMapping::extract_grid_block(const AABB& aabb) {
+    return pimpl_->extract_grid_data<ExtractionType::Block>(aabb, SliceZIndices{});
+}
+
+std::vector<VoxelType> VoxelMapping::extract_grid_slices(const AABB& aabb, const SliceZIndices& slice_indices) {
+    return pimpl_->extract_grid_data<ExtractionType::Slice>(aabb, slice_indices);
+}
+
+std::vector<int> VoxelMapping::extract_edt_block(const AABB& aabb) {
+    return pimpl_->extract_edt_data<ExtractionType::Block>(aabb, SliceZIndices{});
+}
+
+std::vector<int> VoxelMapping::extract_edt_slice(const AABB& aabb, const SliceZIndices& slice_indices) {
+    return pimpl_->extract_edt_data<ExtractionType::Slice>(aabb, slice_indices);
 }
 
 void VoxelMapping::query_free_chunk_capacity() {
     pimpl_->query_free_chunk_capacity();
 }
 
-std::vector<VoxelType> VoxelMapping::get_3d_block(const AABB& aabb) {
-    return pimpl_->extract_grid_block(aabb);
-}
-
-void VoxelMapping::extract_esdf_slice(const AABB& aabb, std::vector<int>& esdf_slice) {
-    pimpl_->extract_esdf_slice(aabb, esdf_slice);
+void VoxelMapping::set_camera_properties(float fx, float fy, float cx, float cy, uint32_t width, uint32_t height) {
+    pimpl_->update_generator_->set_camera_properties(fx, fy, cx, cy, width, height);
 }
 
 AABB VoxelMapping::get_current_aabb() const {
-    AABB aabb;
-    int3 min_corner = pimpl_->update_generator_->get_aabb_min_index();
-    int3 size = pimpl_->update_generator_->get_aabb_size();
-    Vec3i min_corner_index = {min_corner.x, min_corner.y, min_corner.z};
-    Vec3i aabb_size = {size.x, size.y, size.z};
-    aabb.min_corner_index = min_corner_index;
-    aabb.size = aabb_size;
-    return aabb;
+    return pimpl_->update_generator_->get_aabb();
 }
 
 Frustum VoxelMapping::get_frustum() const {

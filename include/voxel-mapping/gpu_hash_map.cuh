@@ -4,9 +4,85 @@
 #include <cuco/static_map.cuh>
 #include <voxel-mapping/types.hpp>
 #include "voxel-mapping/internal_types.cuh"
+#include "voxel-mapping/map_utils.cuh"
 #include <memory>
 
 namespace voxel_mapping {
+
+/**
+ * @brief A generic kernel that traverses a region, queries the voxel map, and applies a user-defined operation.
+ * * @tparam ExtractionTag A tag type (e.g., Block, Slice) to
+ * determine how global_z is calculated.
+ * @tparam Functor A callable type (e.g., a lambda) that processes the retrieved voxel value.
+ * @param map_ref A constant reference to the chunk map.
+ * @param aabb_min_index The minimum index of the AABB in world coordinates.
+ * @param aabb_size The size of the AABB in grid coordinates (size.z used only with BlockExtractionTag).
+ * @param z_indices A struct containing an array of Z indices and their count (used only with SliceExtractionTag).
+ * @param op The callable object to execute for each voxel. It is passed the VoxelType and the
+ * local coordinates (aabb_x, aabb_y, aabb_z) to write the result to the output.
+ */
+template <ExtractionType Tag, typename Functor> __global__ void query_map_and_process_kernel(
+    ConstChunkMapRef map_ref,
+    int3 aabb_min_index,
+    int3 aabb_size,
+    SliceZIndices z_indices,
+    Functor op) {
+    auto group = cooperative_groups::tiled_partition<32>(cooperative_groups::this_thread_block());
+
+    int aabb_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int aabb_y = blockIdx.y * blockDim.y + threadIdx.y;
+    int aabb_z = blockIdx.z;
+
+    bool is_in_bounds = (aabb_x < aabb_size.x && aabb_y < aabb_size.y);
+
+    int global_z;
+
+    if constexpr (Tag == ExtractionType::Slice) {
+        if (aabb_z < z_indices.count) {
+            global_z = z_indices.indices[aabb_z];
+        } else {
+            is_in_bounds = false;
+        }
+    } else {
+        if (aabb_z < aabb_size.z) {
+            global_z = aabb_min_index.z + aabb_z;
+        } else {
+            is_in_bounds = false;
+        }
+    }
+
+    ChunkKey my_key = 0;
+    uint32_t output_idx = 0;
+    
+    int global_x = aabb_min_index.x + aabb_x;
+    int global_y = aabb_min_index.y + aabb_y;
+
+    if (is_in_bounds) {
+        output_idx = block_1d_index(aabb_x, aabb_y, aabb_z, aabb_size.x, aabb_size.y);
+        my_key = get_chunk_key(global_x, global_y, global_z);
+    }
+    
+    unsigned int active_mask = group.ballot(is_in_bounds);
+    
+    while(active_mask != 0) {
+        int leader_lane = __ffs(active_mask) - 1;
+        ChunkKey current_key = group.shfl(my_key, leader_lane);
+        
+        auto it = map_ref.find(group, current_key);
+        
+        if (my_key == current_key) {
+            VoxelType log_odds = default_voxel_value();
+            if (it != map_ref.end() && it->second != invalid_chunk_ptr() && it->second != nullptr) {
+                uint32_t intra_chunk_idx = get_intra_chunk_index(global_x, global_y, global_z);
+                log_odds = it->second[intra_chunk_idx];
+            }
+            op(log_odds, aabb_x, aabb_y, aabb_z);
+        }
+
+        unsigned int processed_mask = group.ballot(my_key == current_key);
+        active_mask &= ~processed_mask;
+    }
+}
 
 class GpuHashMap {
     public:
@@ -41,10 +117,45 @@ class GpuHashMap {
 
         /**
          * @brief Queries the hash map for the voxels within the specified AABB and extracts them into a device memory block.
-         * @param d_output_block Pointer to the output block where the extracted voxels will be stored.
-         * @param aabb The AABB defining the region to extract.
+         * @tparam ExtractionTag A tag type (e.g., SliceExtractionTag, FullVolumeExtractionTag) to
+         * determine how global_z is calculated.
+         * @tparam Functor A callable type (e.g., a lambda) that processes the retrieved voxel value.
+         * @param d_output_buffer Pointer to the output buffer where the extracted voxels will be stored.
+         * @param aabb The AABB defining the region to extract (size.z used only with BlockExtractionTag).
+         * @param z_indices A struct containing an array of Z indices and their count (used only with SliceExtractionTag).
+         * @param extract_op The callable object to execute for each voxel. It is passed the VoxelType and the
+         * local coordinates (aabb_x, aabb_y, aabb_z) to write the result to the output.
          */
-        void extract_block_from_map(VoxelType* d_output_block, const AABB& aabb);
+        template <ExtractionType Tag, typename Functor>
+        void launch_map_extraction_kernel(const AABB& aabb, const SliceZIndices& slice_indices, Functor&& extract_op) {
+            int3 aabb_min_index = {
+                aabb.min_corner_index.x,
+                aabb.min_corner_index.y,
+                aabb.min_corner_index.z
+            };
+            int3 aabb_size = {
+                aabb.size.x,
+                aabb.size.y,
+                aabb.size.z
+            };
+            
+            dim3 block_dim(32, 8, 1);
+            dim3 grid_dim(
+                (aabb_size.x + block_dim.x - 1) / block_dim.x,
+                (aabb_size.y + block_dim.y - 1) / block_dim.y,
+                (aabb_size.z + block_dim.z - 1) / block_dim.z
+            );
+
+            auto map_ref = d_voxel_map_->ref(cuco::op::find);
+
+            query_map_and_process_kernel<Tag><<<grid_dim, block_dim>>>(
+                map_ref,
+                aabb_min_index,
+                aabb_size,
+                slice_indices,
+                extract_op
+            );
+        }
 
         /**
          * @brief Clears chunks from the hash map that either have an invalid chunk pointer or is far away from the current chunk position.

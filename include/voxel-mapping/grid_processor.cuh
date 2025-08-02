@@ -2,9 +2,11 @@
 #define EXTRACTOR_CUH
 
 #include <cuda_runtime.h>
-#include "voxel-mapping/types.hpp"
+#include "voxel-mapping/internal_types.cuh"
 
 namespace voxel_mapping {
+
+enum class Dimension { X, Y, Z };
 
 class GridProcessor {
 public:
@@ -13,38 +15,40 @@ public:
      * @param occupancy_threshold Threshold for occupancy.
      * @param free_threshold Threshold for free space.
      */
-    GridProcessor(int occupancy_threshold, int free_threshold);
-
+    GridProcessor(int occupancy_threshold, int free_threshold, int edt_max_distance);
+    
     /**
-     * @brief Launches the binary slice extraction kernel that converts an AABB into a binary slice.
-     * Sets occupied voxels to 0 and the rest to the greater of size_x or size_y.
-     * @param d_aabb Pointer to the device memory containing the AABB data.
-     * @param d_slice Pointer to the device memory where the extracted slice will be stored.
-     * @param min_x Minimum x-coordinate of the AABB.
-     * @param min_y Minimum y-coordinate of the AABB.
-     * @param min_z Minimum z-coordinate of the AABB.
-     * @param size_x size of the slice.
-     * @param size_y size of the slice.
-     * @param size_z size of the slice to use for projection to the 2D slice.
+     * @brief Launches the kernel for performing 2d Euclidean Distance Transform (EDT) on a set of slices.
+     * @param d_edt_slices Pointer to the device memory where the EDT slices will be stored.
+     * @param size_x Size of the grid in the X dimension.
+     * @param size_y Size of the grid in the Y dimension.
+     * @param num_slices Number of slices to extract.
      * @param stream CUDA stream for asynchronous execution.
      */
-    void launch_extract_binary_slice_kernel(
-    const VoxelType* d_aabb, int* d_slice,
-    int min_x, int min_y,int min_z, 
-    int size_x, int size_y, int size_z,
-    cudaStream_t stream);
+    void launch_edt_slice_kernels(int* d_edt_slices, int size_x, int size_y, int num_slices, cudaStream_t stream);
 
     /**
-     * @brief Launches the EDT (Euclidean Distance Transform) kernels.
-     * @param d_binary_slice Pointer to the device memory containing the binary slice.
-     * @param d_edt Pointer to the device memory where the EDT slice will be stored.
-     * @param size_x Width of the binary slice.
-     * @param size_y Height of the binary slice.
+     * @brief Launches the kernel for performing 3d Euclidean Distance Transform (EDT) on a block of voxels.
+     * @param d_edt_block Pointer to the device memory where the EDT block will be stored.
+     * @param size_x Size of the grid in the X dimension.
+     * @param size_y Size of the grid in the Y dimension.
+     * @param size_z Size of the grid in the Z dimension.
      * @param stream CUDA stream for asynchronous execution.
      */
-    void launch_edt_kernels(int* d_binary_slice, int* d_edt, int size_x, int size_y, cudaStream_t stream);
-
+    void launch_3d_edt_kernels(int* d_edt_block, int size_x, int size_y, int size_z, cudaStream_t stream);
+    
 private:
+    /**
+     * @brief Launches the appropriate kernel for extracting a block of voxels based on the specified extraction type.
+     * @param d_grid Pointer to the device memory where the voxel grid is stored.
+     * @param size_x Size of the grid in the X dimension.
+     * @param size_y Size of the grid in the Y dimension.
+     * @param size_z Size of the grid in the Z dimension.
+     * @param stream CUDA stream for asynchronous execution.
+     */
+    template <ExtractionType Type>
+    void launch_edt_kernels_internal(int* d_grid, int size_x, int size_y, int size_z, cudaStream_t stream);
+
     int occupancy_threshold_;
     int free_threshold_;
 };

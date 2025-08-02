@@ -8,142 +8,100 @@ namespace voxel_mapping {
 
 static __constant__ VoxelType d_occupancy_threshold;
 static __constant__ VoxelType d_free_threshold;
+static __constant__ int d_esdf_max_distance;
 
-GridProcessor::GridProcessor(int occupancy_threshold, int free_threshold)
+GridProcessor::GridProcessor(int occupancy_threshold, int free_threshold, int esdf_max_distance)
     : occupancy_threshold_(occupancy_threshold), free_threshold_(free_threshold) {
     CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_occupancy_threshold, &occupancy_threshold_, sizeof(VoxelType), 0, cudaMemcpyHostToDevice));
     CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_free_threshold, &free_threshold_, sizeof(VoxelType), 0, cudaMemcpyHostToDevice));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_esdf_max_distance, &esdf_max_distance, sizeof(int), 0, cudaMemcpyHostToDevice));
 }
 
-__global__ void extract_binary_slice_kernel(
-    const VoxelType* d_aabb, int* d_slice,
-    int min_x, int min_y, int min_z, int size_x, int size_y, int size_z) {
-    
-    int slice_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int slice_y = blockIdx.y * blockDim.y + threadIdx.y;
-    int slice_size_x = size_x;
-    int slice_size_y = size_y;
+/**
+ * @brief Performs a single 1D pass of a squared Euclidean Distance Transform with a maximum distance.
+ * @tparam Dim The dimension (X, Y, or Z) along which to perform the pass.
+ * @param input Pointer to the input 3D grid in device memory.
+ * @param out Pointer to the output 3D grid in device memory.
+ * @param size_x The size of the grid in the X dimension.
+ * @param size_y The size of the grid in the Y dimension.
+ * @param size_z The size of the grid in the Z dimension.
+ * @param max_distance The maximum distance (in voxels) to search in each direction.
+ */
+template <Dimension Dim>
+__global__ void edt_1d_pass_kernel(int* input, int* out, int size_x, int size_y, int size_z) {
+    int p1, p2, line_length;
 
-    if (slice_x >= slice_size_x || slice_y >= slice_size_y) return;
-
-    int state = size_x > size_y ? size_x : size_y;
-    for (int z = 0; z < size_z; ++z) {
-        int aabb_idx = block_1d_index(slice_x, slice_y, z, size_x, size_y);
-        VoxelType log_odds = d_aabb[aabb_idx];
-
-        if (log_odds >= d_occupancy_threshold) {
-            state = 0;
-            break;
-        }
+    if constexpr (Dim == Dimension::X) {
+        p1 = blockIdx.x; p2 = blockIdx.y; line_length = size_x;
+        if (p1 >= size_y || p2 >= size_z) return;
+    } else if constexpr (Dim == Dimension::Y) {
+        p1 = blockIdx.x; p2 = blockIdx.y; line_length = size_y;
+        if (p1 >= size_x || p2 >= size_z) return;
+    } else { // Dimension::Z
+        p1 = blockIdx.x; p2 = blockIdx.y; line_length = size_z;
+        if (p1 >= size_x || p2 >= size_y) return;
     }
 
-    d_slice[block_1d_index(slice_x, slice_y, 0, size_x, size_y)] = state;
-}
-
-void GridProcessor::launch_extract_binary_slice_kernel(
-    const VoxelType* d_aabb, int* d_slice,
-    int min_x, int min_y,int min_z, 
-    int size_x, int size_y, int size_z,
-    cudaStream_t stream) {
-
-    dim3 threads(16, 16);
-    dim3 blocks((size_x + 15) / 16, (size_y + 15) / 16);
-    extract_binary_slice_kernel<<<blocks, threads, 0, stream>>>(
-        d_aabb, d_slice,
-        min_x, min_y, min_z, size_x, size_y, size_z);
-}
-
-
-__global__ void edt_col_kernel(int* input, int* out, int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y;
-
-    if (x >= height || y >= width) return;
-
-    int rows_per_thread = (height + blockDim.x - 1) / blockDim.x; // Calculate how many rows each thread should handle
-    int until_row = min(x + rows_per_thread, height); // Calculate the last row this thread will handle
-
-    extern __shared__ int col[];
-
-    for (int row = threadIdx.x; row < height; row += blockDim.x) { // Load the column data into shared memory
-        col[row] = input[row * width + y]; // Each block loads one block of rows for each iteration
+    extern __shared__ int line_shmem[];
+    for (int i = threadIdx.x; i < line_length; i += blockDim.x) {
+        size_t idx;
+        if constexpr (Dim == Dimension::X) idx = (size_t)p2 * size_y * size_x + (size_t)p1 * size_x + i;
+        if constexpr (Dim == Dimension::Y) idx = (size_t)p2 * size_y * size_x + (size_t)i  * size_x + p1;
+        if constexpr (Dim == Dimension::Z) idx = (size_t)i  * size_y * size_x + (size_t)p2 * size_x + p1;
+        line_shmem[i] = input[idx];
     }
     __syncthreads();
 
-    for (int row = x; row < until_row; row += blockDim.x) { // Iterate blockwise over rows
-        int value = col[row]; // Initialize the value with the current pixel
+    for (int current_idx = threadIdx.x; current_idx < line_length; current_idx += blockDim.x) {
+        int value = line_shmem[current_idx];
 
-        // Forward pass, iterate over the rows below the current row
-        for (int row_i = 1, d = 1; row_i <= height - row - 1; row_i++) {
-            if (row + row_i < height) {
-                value = min(value, col[row + row_i] + d);
-            }
-            d += 1 + 2 * row_i;
+        for (int i = 1, d = 1; i <= d_esdf_max_distance && current_idx + i < line_length; i++) {
+            value = min(value, line_shmem[current_idx + i] + d);
+            d += 1 + 2 * i;
+        }
+        for (int i = 1, d = 1; i <= d_esdf_max_distance && current_idx - i >= 0; i++) {
+            value = min(value, line_shmem[current_idx - i] + d);
+            d += 1 + 2 * i;
         }
 
-        // Backward pass, iterate over the rows above the current row
-        for (int row_i = 1, d = 1; row_i <= row; row_i++) {
-            if (row - row_i >= 0) {
-                value = min(value, col[row - row_i] + d);
-            }
-            d += 1 + 2 * row_i;
-        }
-
-        out[row * width + y] = value;
+        size_t out_idx;
+        if constexpr (Dim == Dimension::X) out_idx = (size_t)p2 * size_y * size_x + (size_t)p1 * size_x + current_idx;
+        if constexpr (Dim == Dimension::Y) out_idx = (size_t)p2 * size_y * size_x + (size_t)current_idx * size_x + p1;
+        if constexpr (Dim == Dimension::Z) out_idx = (size_t)current_idx * size_y * size_x + (size_t)p2 * size_x + p1;
+        out[out_idx] = value;
     }
 }
 
-__global__ void edt_row_kernel(int* out, int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y;
+template <ExtractionType Type>
+void GridProcessor::launch_edt_kernels_internal(int* d_grid, int size_x, int size_y, int size_z, cudaStream_t stream) {
+    dim3 grid_dim_x(size_y, size_z);
+    dim3 block_dim_x(256);
+    size_t shared_mem_x = size_x * sizeof(int);
+    edt_1d_pass_kernel<Dimension::X><<<grid_dim_x, block_dim_x, shared_mem_x, stream>>>(
+        d_grid, d_grid, size_x, size_y, size_z);
 
-    if (x >= width || y >= height) return;
+    dim3 grid_dim_y(size_x, size_z);
+    dim3 block_dim_y(256);
+    size_t shared_mem_y = size_y * sizeof(int);
+    edt_1d_pass_kernel<Dimension::Y><<<grid_dim_y, block_dim_y, shared_mem_y, stream>>>(
+        d_grid, d_grid, size_x, size_y, size_z);
 
-    int cols_per_thread = (width + blockDim.x - 1) / blockDim.x;
-    int until_col = min(x + cols_per_thread, width);
-
-    extern __shared__ int row[];
-
-    for (int col = threadIdx.x; col < width; col += blockDim.x) {
-        row[col] = out[y * width + col];
-    }
-
-    __syncthreads();
-
-    for (int col = x; col < until_col; col += blockDim.x) {
-        int value = row[col];
-
-        for (int col_i = 1, d = 1; col_i <= width - col - 1; col_i++) {
-            if (col + col_i < width) {
-                value = min(value, row[col + col_i] + d);
-            }
-            d += 1 + 2 * col_i;
-        }
-
-        for (int col_i = 1, d = 1; col_i <= col; col_i++) {
-            if (col - col_i >= 0) {
-                value = min(value, row[col - col_i] + d);
-            }
-            d += 1 + 2 * col_i;
-        }
-
-        out[y * width + col] = value;
+    if constexpr (Type == ExtractionType::Block) {
+        dim3 grid_dim_z(size_x, size_y);
+        dim3 block_dim_z(256);
+        size_t shared_mem_z = size_z * sizeof(int);
+        edt_1d_pass_kernel<Dimension::Z><<<grid_dim_z, block_dim_z, shared_mem_z, stream>>>(
+            d_grid, d_grid, size_x, size_y, size_z);
     }
 }
 
-void GridProcessor::launch_edt_kernels(int* d_binary_slice, int* d_edt, int size_x, int size_y, cudaStream_t stream) {
-    int threadsPerBlock = 256;
+void GridProcessor::launch_edt_slice_kernels(int* d_edt_slices, int size_x, int size_y, int num_slices, cudaStream_t stream) {
+    launch_edt_kernels_internal<ExtractionType::Slice>(d_edt_slices, size_x, size_y, num_slices, stream);
+}
 
-    dim3 blockDim(threadsPerBlock, 1);
-    dim3 gridDim((size_y + threadsPerBlock - 1) / threadsPerBlock, size_x);
-    edt_col_kernel<<<gridDim, blockDim, size_y * sizeof(int), stream>>>(d_binary_slice, d_edt, size_x, size_y);
-
-    CHECK_CUDA_ERROR(cudaGetLastError());
-
-    dim3 gridDim2((size_x + threadsPerBlock - 1) / threadsPerBlock, size_y);
-    edt_row_kernel<<<gridDim2, blockDim, size_x * sizeof(int), stream>>>(d_edt, size_x, size_y);
-
-    CHECK_CUDA_ERROR(cudaGetLastError());
+void GridProcessor::launch_3d_edt_kernels(int* d_grid, int size_x, int size_y, int size_z, cudaStream_t stream) {
+    launch_edt_kernels_internal<ExtractionType::Block>(d_grid, size_x, size_y, size_z, stream);
 }
 
 } // namespace voxel_mapping
+

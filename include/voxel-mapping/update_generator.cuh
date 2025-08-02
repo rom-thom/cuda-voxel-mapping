@@ -65,6 +65,19 @@ public:
     }
 
     /**
+     * @brief Get the defining properties of the AABB
+     * @return A AABB object containing:
+     * - min_corner_index: The minimum index {x, y, z} of the AABB in world coordinates.
+     * - size: The size {x, y, z} of the AABB in grid coordinates.
+     */
+    AABB get_aabb() const {
+        AABB aabb;
+        aabb.min_corner_index = {aabb_min_index_.x, aabb_min_index_.y, aabb_min_index_.z};
+        aabb.size = {aabb_current_size_.x, aabb_current_size_.y, aabb_current_size_.z};
+        return aabb;
+    }
+
+    /**
      * @brief Get the frustum of the camera in world coordinates.
      * @return A Frustum object containing the near and far planes of the camera frustum.
      */

@@ -32,6 +32,8 @@ struct VoxelMappingParams {
     VoxelType occupancy_threshold;
     /// @brief Log-odds value below which a voxel is considered free.
     VoxelType free_threshold;
+    /// @brief Maximum distance for EDT computation.
+    int edt_max_distance;
 };
 
 /**
@@ -53,7 +55,6 @@ public:
     VoxelMapping& operator=(VoxelMapping&&);
     VoxelMapping(const VoxelMapping&) = delete;
     VoxelMapping& operator=(const VoxelMapping&) = delete;
-
 
     /**
      * @brief Sets the necessary camera properties for the voxel mapping to begin processing depth images.
@@ -79,8 +80,31 @@ public:
      * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
      * @return A vector containing the voxel data for the specified AABB.
      */
-    std::vector<VoxelType> get_3d_block(const AABB& aabb);
+    std::vector<VoxelType> extract_grid_block(const AABB& aabb);
 
+    /**
+     * @brief Extracts slices of voxels from the voxel map based on the provided AABB and slice indices.
+     * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
+     * @param slice_indices The indices of the Z slices to extract.
+     * @return A vector containing the voxel data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
+     */
+    std::vector<VoxelType> extract_grid_slices(const AABB& aabb, const SliceZIndices& slice_indices);
+    
+    /**
+     * @brief Extracts a 3D block of the Euclidean Distance Transform (EDT) from the voxel map based on the provided AABB.
+     * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
+     * @return A vector containing the EDT data for the specified AABB.
+     */
+    std::vector<int> extract_edt_block(const AABB& aabb);
+
+    /**
+     * @brief Extracts slices of the Euclidean Distance Transform (EDT) from the voxel map based on the provided AABB and slice indices.
+     *  This serves as a more efficient alternative to extracting the full EDT block, since this does not calculate distances along the z-dimension.
+     * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
+     * @param slice_indices The indices of the Z slices to extract.
+     * @return A vector containing the EDT data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
+     */
+    std::vector<int> extract_edt_slice(const AABB& aabb, const SliceZIndices& slice_indices);
     /**
      * @brief Returns the current AABB's minimum index in world coordinates and its size in grid coordinates.
      * @return AABB struct containing:
@@ -96,15 +120,6 @@ public:
      * - far_plane: The far plane of the frustum, defined by four points in world coordinates.
      */
     Frustum get_frustum() const;
-
-    /**
-     * @brief Extracts the Euclidean Signed Distance Field (ESDF) for a given AABB slice.
-     * @param aabb_slice The AABB defining the region to extract the ESDF.
-     * @param esdf_slice Output vector to store the extracted ESDF values.
-     */
-    void extract_esdf_slice(const AABB& aabb_slice, std::vector<int>& esdf_slice);
-
-    // void extract_slice(const Eigen::VectorXi& indices, std::vector<float>& slice);
 
     /**
      * @brief Checks if the memory pool is nearing capacity and, if so, clears distant and invalid chunks.

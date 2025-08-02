@@ -135,6 +135,38 @@ __device__ inline uint32_t block_1d_index(int tx, int ty, int tz, int size_x, in
     return (tz * size_y * size_x) + (ty * size_x) + tx;
 }
 
+/**
+ * @brief Functor to extract voxel data from a chunk and write it to an output buffer.
+ * This is used to extract the raw log-odds values from the voxel grid.
+ */
+struct ExtractOp {
+    VoxelType* d_output_buffer;
+    int size_x;
+    int size_y;
+
+    __device__ void operator()(VoxelType log_odds, int x, int y, int z) const {
+        uint32_t idx = block_1d_index(x, y, z, size_x, size_y);
+        d_output_buffer[idx] = log_odds;
+    }
+};
+
+/**
+ * @brief Functor to extract binary occupancy data from a chunk and write it to an output buffer.
+ * This is used to convert log-odds values into binary occupancy values based on a threshold.
+ */
+struct ExtractBinaryOp {
+    VoxelType* d_output_buffer;
+    int size_x;
+    int size_y;
+    VoxelType occupancy_threshold;
+    int max_dim_sq;
+
+    __device__ void operator()(VoxelType log_odds, int x, int y, int z) const {
+        uint32_t idx = block_1d_index(x, y, z, size_x, size_y);
+        d_output_buffer[idx] = (log_odds >= occupancy_threshold) ? 0 : max_dim_sq;
+    }
+};
+
 } // namespace voxel_mapping
 
 #endif // MAP_UTILS_CUH
