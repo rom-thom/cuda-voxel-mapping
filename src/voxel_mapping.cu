@@ -17,13 +17,15 @@ class VoxelMapping::VoxelMappingImpl {
 public:
     float resolution_;
     int occupancy_threshold_;
+    int free_threshold_;
     cudaStream_t stream_ = nullptr;
     std::unique_ptr<GpuHashMap> voxel_map_;
     std::unique_ptr<UpdateGenerator> update_generator_;
     std::unique_ptr<GridProcessor> grid_processor_;
 
     VoxelMappingImpl(const VoxelMappingParams& params)
-        : resolution_(params.resolution), occupancy_threshold_(params.occupancy_threshold)
+        : resolution_(params.resolution), occupancy_threshold_(params.occupancy_threshold),
+          free_threshold_(params.free_threshold)
     {
         if (resolution_ <= 0) {
             throw std::invalid_argument("Resolution must be positive");
@@ -128,7 +130,7 @@ public:
         int* d_output_buffer;
         CHECK_CUDA_ERROR(cudaMalloc(&d_output_buffer, total_elements * sizeof(int)));
 
-        ExtractBinaryOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y, occupancy_threshold_, max_dim_sq};
+        ExtractBinaryOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y, free_threshold_, max_dim_sq};
 
         voxel_map_->launch_map_extraction_kernel<Type>(aabb, slice_indices, extract_op);
 
