@@ -1,4 +1,4 @@
-# Voxel Mapping
+# CUDA Voxel Mapping
 Voxel Mapping is a CUDA-accelerated library for generating 3D environment representations for navigation and collision avoidance.
 
 ![Voxel Mapping Demo](docs/pool_df.gif)
