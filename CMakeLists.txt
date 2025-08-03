@@ -22,6 +22,7 @@ find_package(fmt REQUIRED)
 
 add_library(voxel_mapping SHARED
   src/voxel_mapping.cu
+  src/voxel_mapping_impl.cu
   src/update_generator.cu
   src/gpu_hash_map.cu
   src/grid_processor.cu

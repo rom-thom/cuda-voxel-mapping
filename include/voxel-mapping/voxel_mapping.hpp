@@ -8,6 +8,8 @@
 
 namespace voxel_mapping {
 
+class VoxelMappingImpl;
+
 /**
  * @brief Holds all configuration parameters for the VoxelMapping class.
  */
@@ -127,8 +129,6 @@ public:
     void query_free_chunk_capacity();
     
 private:
-    class VoxelMappingImpl;
-
     std::unique_ptr<VoxelMappingImpl> pimpl_;
 };
 
