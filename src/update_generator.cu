@@ -25,6 +25,7 @@ UpdateGenerator::UpdateGenerator(float voxel_resolution, float min_depth, float 
     max_depth_(max_depth)
 {
     CHECK_CUDA_ERROR(cudaMalloc(&d_transform_, 16 * sizeof(float)));
+    CHECK_CUDA_ERROR(cudaHostAlloc(&h_pinned_transform_, 16 * sizeof(float), cudaHostAllocWriteCombined));
 
     CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_resolution, &voxel_resolution_, sizeof(float), 0, cudaMemcpyHostToDevice));
     CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_min_depth, &min_depth_, sizeof(float), 0, cudaMemcpyHostToDevice));
@@ -32,6 +33,8 @@ UpdateGenerator::UpdateGenerator(float voxel_resolution, float min_depth, float 
 }
 
 UpdateGenerator::~UpdateGenerator() {
+    cudaFreeHost(h_pinned_depth_);
+    cudaFreeHost(h_pinned_transform_);
     cudaFree(d_depth_);
     cudaFree(d_transform_);
     cudaFree(d_aabb_);
@@ -47,10 +50,12 @@ void UpdateGenerator::set_camera_properties(
     image_width_ = width;
     image_height_ = height;
 
+    cudaFreeHost(h_pinned_depth_);
     cudaFree(d_depth_);
     cudaFree(d_aabb_);
 
     depth_buffer_size_ = static_cast<size_t>(image_width_) * image_height_ * sizeof(float);
+    CHECK_CUDA_ERROR(cudaHostAlloc(&h_pinned_depth_, depth_buffer_size_, cudaHostAllocWriteCombined));
     CHECK_CUDA_ERROR(cudaMalloc(&d_depth_, depth_buffer_size_));
 
     float frustum_width = (image_width_ / fx_) * max_depth_;
@@ -237,13 +242,17 @@ AABBUpdate UpdateGenerator::generate_updates(
     const float* transform,
     cudaStream_t stream) 
 {
-    CHECK_CUDA_ERROR(cudaMemcpy(d_transform_, transform, 16 * sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA_ERROR(cudaMemcpy(d_depth_, h_depth_image, depth_buffer_size_, cudaMemcpyHostToDevice));
+    compute_active_aabb(transform);
+
+    memcpy(h_pinned_transform_, transform, 16 * sizeof(float));
+    memcpy(h_pinned_depth_, h_depth_image, depth_buffer_size_);
+
+    CHECK_CUDA_ERROR(cudaMemcpyAsync(d_transform_, h_pinned_transform_, 16 * sizeof(float), cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA_ERROR(cudaMemcpyAsync(d_depth_, h_pinned_depth_, depth_buffer_size_, cudaMemcpyHostToDevice, stream));
 
     uint32_t aabb_max_total_size = static_cast<uint32_t>(aabb_max_size_.x) * aabb_max_size_.y * aabb_max_size_.z;
-    CHECK_CUDA_ERROR(cudaMemset(d_aabb_, static_cast<int>(UpdateType::Unknown), aabb_max_total_size * sizeof(UpdateType)));
+    CHECK_CUDA_ERROR(cudaMemsetAsync(d_aabb_, static_cast<int>(UpdateType::Unknown), aabb_max_total_size * sizeof(UpdateType), stream));
 
-    compute_active_aabb(transform);
 
     dim3 threads(16, 16);
     dim3 blocks((image_width_ + threads.x - 1) / threads.x, (image_height_ + threads.y - 1) / threads.y);

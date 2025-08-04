@@ -9,7 +9,8 @@ VoxelMappingImpl::VoxelMappingImpl(const VoxelMappingParams& params)
     if (resolution_ <= 0) {
         throw std::invalid_argument("Resolution must be positive");
     }
-    CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
+    CHECK_CUDA_ERROR(cudaStreamCreate(&insert_stream_));
+    CHECK_CUDA_ERROR(cudaStreamCreate(&extract_stream_));
     voxel_map_ = std::make_unique<GpuHashMap>(params.chunk_capacity, params.log_odds_occupied, params.log_odds_free, params.log_odds_min, params.log_odds_max, params.occupancy_threshold, params.free_threshold);
     spdlog::info("Voxel map initialized on GPU with initial capacity {}", params.chunk_capacity);
     update_generator_ = std::make_unique<UpdateGenerator>(resolution_, params.min_depth, params.max_depth);
@@ -19,21 +20,25 @@ VoxelMappingImpl::VoxelMappingImpl(const VoxelMappingParams& params)
 }
 
 VoxelMappingImpl::~VoxelMappingImpl() {
-    if (stream_) cudaStreamDestroy(stream_);
+    if (insert_stream_) cudaStreamDestroy(insert_stream_);
+    if (extract_stream_) cudaStreamDestroy(extract_stream_);
 }
 
 void VoxelMappingImpl::integrate_depth(const float* depth_image, const float* transform) {
     AABBUpdate aabb_update = update_generator_->generate_updates(
         depth_image, 
         transform,
-        stream_
-    );
-
-    voxel_map_->launch_map_update_kernel(
-        aabb_update,
-        stream_
+        insert_stream_
     );
     
+    {
+        std::shared_lock lock(map_mutex_);
+        voxel_map_->launch_map_update_kernel(
+            aabb_update,
+            insert_stream_
+        );
+    }
+
 }
 
 void VoxelMappingImpl::set_camera_properties(float fx, float fy, float cx, float cy, uint32_t width, uint32_t height) {
@@ -60,7 +65,10 @@ void VoxelMappingImpl::query_free_chunk_capacity() {
         spdlog::info("Freelist usage ({}) is above 95% threshold ({}). Clearing distant chunks.", 
                         current_freelist_count, threshold);
 
-        voxel_map_->clear_chunks(current_chunk_pos);
+        {
+            std::unique_lock lock(map_mutex_);
+            voxel_map_->clear_chunks(current_chunk_pos);
+        }
     }
 }
 

@@ -207,7 +207,7 @@ void GpuHashMap::launch_map_update_kernel(
             aabb_update.aabb_current_size.y,
             aabb_update.aabb_current_size.z
         };
-        
+
         dim3 block_dim(32, 8, 1);
         dim3 grid_dim(
             (aabb_size.x + block_dim.x - 1) / block_dim.x,
@@ -222,7 +222,6 @@ void GpuHashMap::launch_map_update_kernel(
             aabb_update.d_aabb_grid,
             aabb_update.aabb_min_index,
             aabb_size);
-            CHECK_CUDA_ERROR(cudaGetLastError());
         }
 
 void GpuHashMap::clear_chunks(const int3& current_chunk_pos) {

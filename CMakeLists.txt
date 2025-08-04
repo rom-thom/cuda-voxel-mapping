@@ -26,6 +26,7 @@ add_library(voxel_mapping SHARED
   src/update_generator.cu
   src/gpu_hash_map.cu
   src/grid_processor.cu
+  src/extraction_result.cpp
 )
 
 target_link_libraries(voxel_mapping

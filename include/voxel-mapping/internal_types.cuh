@@ -43,7 +43,7 @@ struct AABBUpdate {
     ///< Minimum index (corner) of the AABB in 3D grid coordinates.
     int3 aabb_min_index;
     ///< Current size of the AABB in grid units.
-    int3 aabb_current_size; 
+    int3 aabb_current_size;
 };
 
 /**

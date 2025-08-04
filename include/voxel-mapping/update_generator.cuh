@@ -139,7 +139,9 @@ private:
     float max_depth_;
 
     UpdateType* d_aabb_ = nullptr;
+    float* h_pinned_transform_ = nullptr;
     float* d_transform_ = nullptr;
+    float* h_pinned_depth_ = nullptr;
     float* d_depth_ = nullptr;
     size_t depth_buffer_size_ = 0;
     uint32_t image_width_;

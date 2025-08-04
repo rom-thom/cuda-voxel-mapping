@@ -3,6 +3,7 @@
 
 #include "voxel-mapping/voxel_mapping.hpp"
 #include <cuda_runtime.h>
+#include <shared_mutex>
 #include <memory>
 
 #include "voxel-mapping/gpu_hash_map.cuh"
@@ -12,6 +13,7 @@
 #include "voxel-mapping/internal_types.cuh"
 #include "voxel-mapping/host_macros.hpp"
 #include "voxel-mapping/map_utils.cuh"
+#include "voxel-mapping/extraction_result_impl.hpp"
 
 namespace voxel_mapping {
 
@@ -29,9 +31,11 @@ public:
     Frustum get_frustum() const;
 
     template <ExtractionType Type>
-    std::vector<VoxelType> extract_grid_data(const AABB& aabb, const SliceZIndices& slice_indices) {
-        const int aabb_size_x = aabb.size.x;
-        const int aabb_size_y = aabb.size.y;
+    ExtractionResult extract_grid_data(const AABB& aabb, const SliceZIndices& slice_indices) {
+    ExtractionResult result;
+
+    const int aabb_size_x = aabb.size.x;
+    const int aabb_size_y = aabb.size.y;
     
     int num_z_layers;
     if constexpr (Type == ExtractionType::Block) {
@@ -43,35 +47,46 @@ public:
     const size_t total_elements = static_cast<size_t>(aabb_size_x) * aabb_size_y * num_z_layers;
 
     if (total_elements == 0) {
-        return {};
+        return result;
     }
 
-    std::vector<VoxelType> h_output(total_elements);
-    VoxelType* d_output_buffer;
-    CHECK_CUDA_ERROR(cudaMalloc(&d_output_buffer, total_elements * sizeof(VoxelType)));
+    auto impl = std::make_unique<ExtractionResultTyped<VoxelType>>();
+    impl->size_bytes_ = total_elements * sizeof(VoxelType);
 
-    ExtractOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y};
+    CHECK_CUDA_ERROR(cudaMalloc(&impl->d_data_, impl->size_bytes_));
+    CHECK_CUDA_ERROR(cudaHostAlloc(&impl->h_pinned_data_, impl->size_bytes_, cudaHostAllocDefault));
+    
+    ExtractOp extract_op = {static_cast<VoxelType*>(impl->d_data_), aabb.size.x, aabb.size.y};
 
-    voxel_map_->launch_map_extraction_kernel<Type>(
-        aabb, 
-        slice_indices, 
-        extract_op
-    );
+    {
+        std::shared_lock lock(map_mutex_);
+        voxel_map_->launch_map_extraction_kernel<Type>(
+            aabb, 
+            slice_indices, 
+            extract_op,
+            extract_stream_
+        );
+    }
 
-    CHECK_CUDA_ERROR(cudaMemcpy(
-        h_output.data(), 
-        d_output_buffer, 
-        total_elements * sizeof(VoxelType),
-        cudaMemcpyDeviceToHost
+    CHECK_CUDA_ERROR(cudaMemcpyAsync(
+        impl->h_pinned_data_,
+        impl->d_data_,
+        impl->size_bytes_,
+        cudaMemcpyDeviceToHost,
+        extract_stream_
     ));
 
-    CHECK_CUDA_ERROR(cudaFree(d_output_buffer));
-    
-    return h_output;
+    CHECK_CUDA_ERROR(cudaEventCreate(&impl->event_));
+    CHECK_CUDA_ERROR(cudaEventRecord(impl->event_, extract_stream_));
+
+    result.pimpl_ = std::move(impl);
+    return result;
 }
 
 template <ExtractionType Type>
-std::vector<int> extract_edt_data(const AABB& aabb, const SliceZIndices& slice_indices) {
+ExtractionResult extract_edt_data(const AABB& aabb, const SliceZIndices& slice_indices) {
+    ExtractionResult result;
+
     const int aabb_size_x = aabb.size.x;
     const int aabb_size_y = aabb.size.y;
     
@@ -90,45 +105,58 @@ std::vector<int> extract_edt_data(const AABB& aabb, const SliceZIndices& slice_i
     const size_t total_elements = static_cast<size_t>(aabb_size_x) * aabb_size_y * num_z_layers;
 
     if (total_elements == 0) {
-        return {};
+        return result;
     }
+    auto impl = std::make_unique<ExtractionResultTyped<int>>();
+    impl->size_bytes_ = total_elements * sizeof(int);
 
-    std::vector<int> h_output(total_elements);
-    int* d_output_buffer;
-    CHECK_CUDA_ERROR(cudaMalloc(&d_output_buffer, total_elements * sizeof(int)));
+    CHECK_CUDA_ERROR(cudaMalloc(&impl->d_data_, impl->size_bytes_));
+    CHECK_CUDA_ERROR(cudaHostAlloc(&impl->h_pinned_data_, impl->size_bytes_, cudaHostAllocDefault));
 
-    ExtractBinaryOp extract_op = {d_output_buffer, aabb_size_x, aabb_size_y, free_threshold_, max_dim_sq};
+    ExtractBinaryOp extract_op = {static_cast<int*>(impl->d_data_), aabb_size_x, aabb_size_y, free_threshold_, max_dim_sq};
 
-    voxel_map_->launch_map_extraction_kernel<Type>(aabb, slice_indices, extract_op);
+    {
+        std::shared_lock lock(map_mutex_);
+        voxel_map_->launch_map_extraction_kernel<Type>(
+            aabb, 
+            slice_indices, 
+            extract_op,
+            extract_stream_
+        );
+    }
 
     if constexpr (Type == ExtractionType::Block) {
         grid_processor_->launch_3d_edt_kernels(
-            d_output_buffer, aabb_size_x, aabb_size_y, num_z_layers, stream_
+            static_cast<int*>(impl->d_data_), aabb_size_x, aabb_size_y, num_z_layers, extract_stream_
         );
     } else {
         grid_processor_->launch_edt_slice_kernels(
-            d_output_buffer, aabb_size_x, aabb_size_y, num_z_layers, stream_
+            static_cast<int*>(impl->d_data_), aabb_size_x, aabb_size_y, num_z_layers, extract_stream_
         );
     }
 
-    CHECK_CUDA_ERROR(cudaMemcpy(
-        h_output.data(), 
-        d_output_buffer, 
-        total_elements * sizeof(int),
-        cudaMemcpyDeviceToHost
+    CHECK_CUDA_ERROR(cudaMemcpyAsync(
+        impl->h_pinned_data_,
+        impl->d_data_,
+        impl->size_bytes_,
+        cudaMemcpyDeviceToHost,
+        extract_stream_
     ));
 
-    CHECK_CUDA_ERROR(cudaFree(d_output_buffer));
-    
-    return h_output;
+    CHECK_CUDA_ERROR(cudaEventCreate(&impl->event_));
+    CHECK_CUDA_ERROR(cudaEventRecord(impl->event_, extract_stream_));
+
+    result.pimpl_ = std::move(impl);
+    return result;
 }
 
 private:
     float resolution_;
     int occupancy_threshold_;
     int free_threshold_;
-    mutable std::shared_mutex gpu_mutex_;
-    cudaStream_t stream_ = nullptr;
+    mutable std::shared_mutex map_mutex_;
+    cudaStream_t insert_stream_ = nullptr;
+    cudaStream_t extract_stream_ = nullptr;
     std::unique_ptr<GpuHashMap> voxel_map_;
     std::unique_ptr<UpdateGenerator> update_generator_;
     std::unique_ptr<GridProcessor> grid_processor_;
