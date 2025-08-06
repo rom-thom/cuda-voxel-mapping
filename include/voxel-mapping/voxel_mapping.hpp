@@ -107,7 +107,7 @@ public:
      * @param slice_indices The indices of the Z slices to extract.
      * @return An ExtractionResult object containing the EDT data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
      */
-    ExtractionResult extract_edt_slice(const AABB& aabb, const SliceZIndices& slice_indices);
+    ExtractionResult extract_edt_slices(const AABB& aabb, const SliceZIndices& slice_indices);
     /**
      * @brief Returns the current AABB's minimum index in world coordinates and its size in grid coordinates.
      * @return AABB struct containing:

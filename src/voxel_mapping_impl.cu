@@ -1,4 +1,7 @@
 #include "voxel-mapping/voxel_mapping_impl.cuh"
+#ifdef USE_NVTX
+    #include <nvtx3/nvToolsExt.h>
+#endif
 
 namespace voxel_mapping {
 
@@ -25,6 +28,9 @@ VoxelMappingImpl::~VoxelMappingImpl() {
 }
 
 void VoxelMappingImpl::integrate_depth(const float* depth_image, const float* transform) {
+    #ifdef USE_NVTX
+        nvtx3::scoped_range r{"Integrate Depth"};
+    #endif
     AABBUpdate aabb_update = update_generator_->generate_updates(
         depth_image, 
         transform,
@@ -38,7 +44,6 @@ void VoxelMappingImpl::integrate_depth(const float* depth_image, const float* tr
             insert_stream_
         );
     }
-
 }
 
 void VoxelMappingImpl::set_camera_properties(float fx, float fy, float cx, float cy, uint32_t width, uint32_t height) {
@@ -54,6 +59,9 @@ Frustum VoxelMappingImpl::get_frustum() const {
 }
 
 void VoxelMappingImpl::query_free_chunk_capacity() {
+    #ifdef USE_NVTX
+        nvtx3::scoped_range r{"query_free_chunk_capacity"};
+    #endif
     uint32_t current_freelist_count;
     voxel_map_->get_freelist_counter(&current_freelist_count);
     size_t freelist_capacity = voxel_map_->get_freelist_capacity();

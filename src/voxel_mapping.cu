@@ -27,7 +27,7 @@ ExtractionResult VoxelMapping::extract_edt_block(const AABB& aabb) {
     return pimpl_->extract_edt_data<ExtractionType::Block>(aabb, SliceZIndices{});
 }
 
-ExtractionResult VoxelMapping::extract_edt_slice(const AABB& aabb, const SliceZIndices& slice_indices) {
+ExtractionResult VoxelMapping::extract_edt_slices(const AABB& aabb, const SliceZIndices& slice_indices) {
     return pimpl_->extract_edt_data<ExtractionType::Slice>(aabb, slice_indices);
 }
 
