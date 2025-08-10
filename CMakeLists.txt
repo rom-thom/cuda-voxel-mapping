@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(voxel_mapping VERSION 0.1.0 LANGUAGES CXX CUDA)
 
+option(USE_NVTX "Enable NVTX profiling support" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 
@@ -21,12 +23,35 @@ find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
 add_library(voxel_mapping SHARED
-  src/voxel_mapping.cu
-  src/voxel_mapping_impl.cu
-  src/update_generator.cu
-  src/gpu_hash_map.cu
-  src/grid_processor.cu
+src/voxel_mapping.cu
+src/voxel_mapping_impl.cu
+src/update_generator.cu
+src/gpu_hash_map.cu
+src/grid_processor.cu
+src/extraction_result.cpp
 )
+
+if(USE_NVTX)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64") # Jetson ARM 64-bit
+    set(NVTX_LIBRARY_PATH /usr/lib/aarch64-linux-gnu/libnvToolsExt.so)
+    set(NVTX_INCLUDE_DIR /usr/include)
+  else() # Desktop x86_64 
+    set(NVTX_LIBRARY_PATH /usr/local/cuda-12.8/targets/x86_64-linux/lib/libnvToolsExt.so)
+    set(NVTX_INCLUDE_DIR /usr/local/cuda-12.8/include)
+  endif()
+
+  if(EXISTS ${NVTX_LIBRARY_PATH})
+    message(STATUS "NVTX enabled. Found at ${NVTX_LIBRARY_PATH}")
+    set(NVTX_LIBRARY ${NVTX_LIBRARY_PATH})
+
+    target_link_libraries(voxel_mapping PRIVATE ${NVTX_LIBRARY})
+    target_compile_definitions(voxel_mapping PRIVATE USE_NVTX)
+    target_include_directories(voxel_mapping PRIVATE ${NVTX_INCLUDE_DIR})
+
+  else()
+    message(FATAL_ERROR "NVTX requested but not found at ${NVTX_LIBRARY_PATH}")
+  endif()
+endif()
 
 target_link_libraries(voxel_mapping
   PRIVATE

@@ -127,7 +127,7 @@ class GpuHashMap {
          * local coordinates (aabb_x, aabb_y, aabb_z) to write the result to the output.
          */
         template <ExtractionType Tag, typename Functor>
-        void launch_map_extraction_kernel(const AABB& aabb, const SliceZIndices& slice_indices, Functor&& extract_op) {
+        void launch_map_extraction_kernel(const AABB& aabb, const SliceZIndices& slice_indices, Functor&& extract_op, cudaStream_t stream) {
             int3 aabb_min_index = {
                 aabb.min_corner_index.x,
                 aabb.min_corner_index.y,
@@ -148,7 +148,7 @@ class GpuHashMap {
 
             auto map_ref = d_voxel_map_->ref(cuco::op::find);
 
-            query_map_and_process_kernel<Tag><<<grid_dim, block_dim>>>(
+            query_map_and_process_kernel<Tag><<<grid_dim, block_dim, 0, stream>>>(
                 map_ref,
                 aabb_min_index,
                 aabb_size,

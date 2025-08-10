@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include "voxel-mapping/types.hpp"
+#include "voxel-mapping/extraction_result.hpp"
 
 namespace voxel_mapping {
 
@@ -80,33 +81,33 @@ public:
     /**
      * @brief Extracts a 3D block of voxels from the voxel map based on the provided AABB.
      * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
-     * @return A vector containing the voxel data for the specified AABB.
+     * @return An ExtractionResult object containing the data for the specified AABB.
      */
-    std::vector<VoxelType> extract_grid_block(const AABB& aabb);
+    ExtractionResult extract_grid_block(const AABB& aabb);
 
     /**
      * @brief Extracts slices of voxels from the voxel map based on the provided AABB and slice indices.
      * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
      * @param slice_indices The indices of the Z slices to extract.
-     * @return A vector containing the voxel data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
+     * @return An ExtractionResult object containing the data where slices are stacked in the order they are defined in slice_indices.indices.
      */
-    std::vector<VoxelType> extract_grid_slices(const AABB& aabb, const SliceZIndices& slice_indices);
-    
+    ExtractionResult extract_grid_slices(const AABB& aabb, const SliceZIndices& slice_indices);
+
     /**
      * @brief Extracts a 3D block of the Euclidean Distance Transform (EDT) from the voxel map based on the provided AABB.
      * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
-     * @return A vector containing the EDT data for the specified AABB.
+     * @return An ExtractionResult object containing the EDT data for the specified AABB.
      */
-    std::vector<int> extract_edt_block(const AABB& aabb);
+    ExtractionResult extract_edt_block(const AABB& aabb);
 
     /**
      * @brief Extracts slices of the Euclidean Distance Transform (EDT) from the voxel map based on the provided AABB and slice indices.
      *  This serves as a more efficient alternative to extracting the full EDT block, since this does not calculate distances along the z-dimension.
      * @param aabb The AABB defining the region to extract defined by its minimum corner index and size.
      * @param slice_indices The indices of the Z slices to extract.
-     * @return A vector containing the EDT data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
+     * @return An ExtractionResult object containing the EDT data for the specified slices with slices stacked in the order they are defined in slice_indices.indices.
      */
-    std::vector<int> extract_edt_slice(const AABB& aabb, const SliceZIndices& slice_indices);
+    ExtractionResult extract_edt_slices(const AABB& aabb, const SliceZIndices& slice_indices);
     /**
      * @brief Returns the current AABB's minimum index in world coordinates and its size in grid coordinates.
      * @return AABB struct containing:
