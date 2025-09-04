@@ -1,0 +1,1 @@
+We could use CHOMP for smothing out the curve
