@@ -25,7 +25,7 @@ class PathPlaner:
     def collision_between_points(self, p1_xy: tuple[float, float], p2_xy: tuple[float, float])->bool:
         dist_between = np.sqrt((p2_xy[0]-p1_xy[0])**2 + (p2_xy[1]-p1_xy[1])**2)
             
-        # TODO Swap this for ray marching right now we check needlesly much space
+        # TODO Swap this for sphare marching right now we check needlesly much space
         
         sub_path = Path.line_path_spacing(start_xy=p1_xy, end_xy=p2_xy, spacing=self.radius*2, include_end=False)
 
