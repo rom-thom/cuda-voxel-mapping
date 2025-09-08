@@ -24,6 +24,15 @@ def gradient_3x3(patch: np.ndarray, dx, dy):
 
 
         
+def _xy_to_rc(xy):
+    """(x,y) -> (r,c) for numpy indexing."""
+    x, y = xy
+    return int(y), int(x)  # r=y, c=x
+
+def _rc_to_xy(rc):
+    """(r,c) -> (x,y) from numpy indexing."""
+    r, c = rc
+    return int(c), int(r)  # r=y, c=x
 
 
 
@@ -44,12 +53,6 @@ class Field:
         self.esdf = self.fields["esdf"]
 
     # ---------- helpers: index conventions ----------
-    @staticmethod
-    def _xy_to_rc(xy):
-        """(x,y) -> (r,c) for numpy indexing."""
-        x, y = xy
-        return int(y), int(x)  # r=y, c=x
-
     def _meters_to_cells(self, xy_m):
         """(x,y) meters -> (x,y) cells (float)."""
         x, y = xy_m
@@ -234,6 +237,10 @@ class Field:
         xs = np.linspace(x0, x1, n)
         ys = np.linspace(y0, y1, n)
         return list(zip(xs, ys))
+    
+    def is_of_grid(self, point_xy):
+        int_xy = (int(point_xy[0]), int(point_xy[1]))
+        return int_xy[0] < 0 or int_xy[1] < 0 or int_xy[0] > self.width or int_xy[1] > self.height
 
     # ---------- distance & direction at a point (cells or meters) ----------
     def dist_to_closest(self, point_xy, in_meters=False):
@@ -245,7 +252,7 @@ class Field:
             x_c, y_c = self._meters_to_cells(point_xy)
         else:
             x_c, y_c = point_xy
-        r, c = self._xy_to_rc((np.floor(x_c), np.floor(y_c)))
+        r, c = _xy_to_rc((np.floor(x_c), np.floor(y_c)))
         if 0 <= r < self.esdf.shape[0] and 0 <= c < self.esdf.shape[1]:
             return float(self.esdf[r, c])
         return -np.inf
@@ -325,6 +332,8 @@ if __name__ == "__main__":
 
     q = (2.0, 1.2)                               # mark this point
     u = field_obj.dir_to_closest(q, in_meters=True)  # arrow direction (unit)
+
+    print(field_obj.is_of_grid((161, 121)))
 
     field_obj.display_fields(
         paths=[p1, p2],
