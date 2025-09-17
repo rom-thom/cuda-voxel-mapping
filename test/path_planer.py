@@ -17,13 +17,13 @@ class PathPlaner:
         self.points = []
         self.radius = collision_radius
 
-    def clairance(self, point_xy=None, radius=None):
+    def clearance(self, point_xy=None, radius=None):
         if point_xy is None:
             point_xy = self.start_pos
         if radius is None:
             radius = self.radius
 
-        return self.field.dist_to_closest(point_xy=point_xy) - radius
+        return self.field.dist_to_closest(point_xy=point_xy) - radius - np.sqrt(2) * self.field.resolution
     
     def is_line_coliding(self, p1_xy, p2_xy, eps = 1e-6, max_steps = 1000): # Using sphare marching
         x1, y1 = p1_xy
@@ -36,7 +36,7 @@ class PathPlaner:
 
 
         if total_dist == 0:
-            point_for_np = _xy_to_rc(point)
+            point_for_np = _xy_to_rc(p1_xy)
             obs_dist = self.esdf[point_for_np[0]][point_for_np[1]]
             return obs_dist < eps
         
@@ -57,41 +57,92 @@ class PathPlaner:
         
         raise RuntimeError("The function did not find the end after max iterations")
             
-    
-    # TODO implement this beter
-    def collision_between_orcas(self, p1_xy: tuple[float, float], p2_xy: tuple[float, float])->bool: # Finds  wether orca could have gone there
-        dist_between = np.sqrt((p2_xy[0]-p1_xy[0])**2 + (p2_xy[1]-p1_xy[1])**2)
-            
-        # TODO Swap this for sphare marching oslt right now we check needlesly much space
-        
-        sub_path = Path.line_path_spacing(start_xy=p1_xy, end_xy=p2_xy, spacing=self.radius*2, include_end=False)
 
-        # self.paths.append(sub_path) # !!! For testing only
-        # self.points.extend(sub_path.path) # !!! For testing only
+    def is_orca_colliding(
+        self,
+        p1_xy: tuple[float, float],
+        p2_xy: tuple[float, float],
+        radius = None,
+        max_steps: int = 1000,
+        eps: float = 1e-6,
+        k = 4 # This is how much ahead of the clearance distance you can check
+    ) -> bool:
+        """
+        True if the road from p1_xy to p2_xy with radius collides.
+        Uses look-ahead steps (k) certified by the 1-Lipschitz property to avoid creeping.
+        """
+        x1, y1 = p1_xy
+        x2, y2 = p2_xy
 
-        for nr, point in enumerate(sub_path.path):
-            if nr % 2 != 0: # We check every other element just with extra radius, to be able to see for the neighboring ones, and then it wil not me any intersection to check for
-                if self.clairance(point_xy=point, radius=3*self.radius) < 0:
-                    return True
-                
-        if len(sub_path.path) % 2 == 0:  # i also have to check the last element if that is odd, as otherwise the last element could be coliding
-            if self.clairance(point_xy=sub_path.path[-1], radius=3*self.radius) < 0:
+        r = radius if radius is not None else self.radius
+
+        dx, dy = x2 - x1, y2 - y1
+        L = np.hypot(dx, dy)
+        if L == 0:
+            return (self.field.esdf_at_xy(x1, y1) - r) < 0.0
+        ux, uy = dx / L, dy / L
+
+
+        # Early check
+        if self.clearance(p1_xy, radius=r) <= 0.0:
+            return True
+
+        t = 0.0
+        steps = 0
+        while t < L - eps and steps < max_steps:
+            steps += 1
+            px, py = x1 + ux * t, y1 + uy * t
+            d0 = self.clearance((px, py), radius=r)
+            if d0 <= 0.0:
                 return True
 
+            # If current clearance already exceeds remaining distance, we can certify the rest.
+            if d0 >= (L - t):
+                return False
 
-        
-        # TODO lets do some ray marching (https://typhomnt.github.io/teaching/ray_tracing/raymarching_intro/)
+            # Propose a big step (k>1). We'll *certify* it before accepting.
+            s = min(k * d0 + eps, L - t) # Look for colitions ahead of the target (however we cant garante safety outside d0)
+            
+            # Certifying the step
+            while True:
+                p1x, p1y = px + ux * s, py + uy * s
+                d1 = self.clearance((p1x, p1y), radius=r)
 
-        if self.clairance(p1_xy) <= 0 or self.clairance(p2_xy) <= 0: # seing if the points themselves are coliding with a wall
-            return True
-        
+                # Lipschitz certificate: whole chunk [t, t+s] is safe
+                if min(d0, d1) - s >= 0.0:
+                    t += s
+                    break
+
+                # Found an unsafe endpoint -> collision somewhere in [t, t+s]
+                if d1 <= 0.0: # This wil only run once at the end of the serch
+                    self.points.append((p1x, p1y)) #! debuging only
+                    #TODO the this might not be needed but i have it so that i later can pinpoint the position of impact
+                    # lo, hi = t, t + s # Lowest and highest posible values
+                    # for _ in range(40):                # logarithmic refinement
+                    #     if hi - lo <= eps:
+                    #         break
+                    #     mid = 0.5 * (lo + hi)
+                    #     dm = self.clearance((x1 + ux * mid, y1 + uy * mid), radius=r)
+                    #     if dm < 0.0: hi = mid
+                    #     else:        lo = mid
+                    return True
+
+                # Not certified safe, and not unsafe at the far end -> shrink step and retry
+                s *= 0.5
+                if s <= max(d0, eps):
+                    # Fall back to the local safe step to keep making progress
+                    t += max(d0, eps)
+                    break
+
         return False
+
+
 
     def punish_point(self, point_xy = None, weight = 5, strength = 2):
         if point_xy is None:
             point_xy = self.start_pos
 
-        c = self.clairance(point_xy=point_xy)
+        c = self.clearance(point_xy=point_xy)
         if c <= 0: # Is inside walls
             # TODO return da big value so that it doesnt try to go there
             return 100000000
@@ -109,7 +160,6 @@ class PathPlaner:
         else:  
 
             self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius)
-
 
     def APF(self, start_xy, goal_xy, max_iter = 10000): # Gives a path to the end or None if it goes to deep into the loop without finding it
         def next_point(point):
@@ -135,7 +185,7 @@ class PathPlaner:
 if __name__ == "__main__":
     field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1)
 
-    # test_point = (100, 60)
+    test_point = (130, 10)
     start = (140, 100)
     end = (10, 30)
 
@@ -152,7 +202,10 @@ if __name__ == "__main__":
     test_path = pp.APF(start, end)
     
     pp.paths.append(test_path)
+    
+    colide = pp.is_orca_colliding(start, test_point)
+    print("colition betwen orcas: ", colide)
 
     pp.paths.extend(current_paths)
-    pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start])
+    pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
 
