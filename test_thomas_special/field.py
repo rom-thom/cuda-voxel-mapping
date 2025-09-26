@@ -35,10 +35,34 @@ def _rc_to_xy(rc):
     return int(c), int(r)  # r=y, c=x
 
 
+def _closest_point(start_rc, dir_xy):
+    """
+    Return the next grid cell in direction dir_xy. Not my problem if it is outside the grid
+    
+    Args:
+        start_rc: (r, c) current integer cell (NumPy row/col).
+        dir_xy: (dx, dy) direction in math coords (x right, y up).
+        grid_shape: optional (rows, cols) to clip; if next step exits, returns None.
+    """
+    r0, c0 = start_rc
+    dx, dy = dir_xy
+    if dx == 0 and dy == 0:
+        raise ValueError("it has to move at leats a bit.")
 
+    # from xy direction to rc
+    dc = float(dx)
+    dr = float(-dy)
 
-
-
+    if abs(dc) > abs(dr): # move vertical
+        step_c = 1 if dc > 0  else -1
+        return (r0, c0 + step_c)
+    if abs(dc) < abs(dr): # move the other vertical
+        step_r = 1 if dr > 0  else -1
+        return (r0 + step_r, c0)
+    step_r = 1 if dr > 0  else -1
+    step_c = 1 if dc > 0  else -1
+    return (r0 + step_r, c0 + step_c)
+    
 
 class Field:
     def __init__(self, height=120, width=160, seed=0, spacing=12, resolution=0.05):
@@ -313,7 +337,7 @@ class Field:
 
 
 if __name__ == "__main__":
-    field_obj = Field(height=120, width=160, seed=5, spacing=14, resolution=1)
+    field_obj = Field(height=100, width=120, seed=5, spacing=14, resolution=1)
 
     fields = field_obj.fields  # occ/esdf/res
     print("shapes:", fields["occ"].shape, fields["esdf"].shape)
@@ -340,5 +364,3 @@ if __name__ == "__main__":
         mark_xy_list=[q], mark_radius_m=0.3,
         arrow_start_xy=q, arrow_dir_xy=u, arrow_len_m=0.6
     )
-
-

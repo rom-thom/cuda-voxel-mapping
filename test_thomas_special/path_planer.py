@@ -1,5 +1,5 @@
 from path import Path
-from field import Field, _xy_to_rc
+from field import Field, _xy_to_rc, _closest_point, _rc_to_xy
 import numpy as np
 import APF
 
@@ -162,12 +162,14 @@ class PathPlaner:
             self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius)
 
     def APF(self, start_xy, goal_xy, max_iter = 10000): # Gives a path to the end or None if it goes to deep into the loop without finding it
-        def next_point(point):
+        def next_point(point): # -> next xy_point
             index_point = (int(point[0]), int(point[1]))
             dist_obs = self.field.dist_to_closest(index_point)
             dir_obs = self.field.dir_to_closest(index_point)
             gx, gy =  APF.F_APF(point, goal_xy, dist_obs, dir_obs, 2000, 1, self.radius, self.radius * 200)
+
             return (point[0]+gx*0.005, point[1] + gy*0.005)
+
         
         current_point = start_xy
         path = Path([start_xy])
