@@ -2,6 +2,7 @@ from path import Path
 from field import Field, _xy_to_rc, _closest_point, _rc_to_xy
 import numpy as np
 import APF
+from CHOMP.CHOMP_homemade import chomp
 
 def dist_between(p1, p2):
     return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
@@ -184,6 +185,39 @@ class PathPlaner:
         return path
 
     
+# if __name__ == "__main__":
+#     field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1)
+
+#     test_point = (130, 10)
+#     start = (140, 100)
+#     end = (10, 30)
+
+#     current_paths = []
+
+#     radius = 5
+
+#     pp = PathPlaner(start, end, field_obj, radius)
+    
+#     line_spacing = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
+#     line = Path.line_path(start_xy=start, end_xy=end, n = 3)
+#     pp.paths.append(line_spacing)
+
+#     test_path = pp.APF(start, end)
+
+#     delta_test_path = CHOMP(field=field_obj, start_path=test_path, weight_obst=0.000, weight_smoothnes=5, weight_total=0.01)
+    
+#     ny_test_path = test_path + delta_test_path
+
+    
+#     pp.paths.append(test_path)
+#     pp.paths.append(ny_test_path)
+    
+#     colide = pp.is_orca_colliding(start, test_point)
+#     print("colition betwen orcas: ", colide)
+
+#     pp.paths.extend(current_paths)
+#     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
+
 if __name__ == "__main__":
     field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1)
 
@@ -197,17 +231,19 @@ if __name__ == "__main__":
 
     pp = PathPlaner(start, end, field_obj, radius)
     
-    line_spacing = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
-    line = Path.line_path(start_xy=start, end_xy=end, n = 3)
-    pp.paths.append(line_spacing)
+    line = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
 
-    test_path = pp.APF(start, end)
-    
-    pp.paths.append(test_path)
-    
-    colide = pp.is_orca_colliding(start, test_point)
-    print("colition betwen orcas: ", colide)
+    ny_test_path = line
+    for i in range(20):
+        ny_test_path = chomp(field=field_obj, start_path=ny_test_path, weight_obst=0.1, weight_smooth=0.1 )
 
+
+
+    
+    
+    pp.paths.append(line)
+    pp.paths.append(ny_test_path)
+    
     pp.paths.extend(current_paths)
     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
 

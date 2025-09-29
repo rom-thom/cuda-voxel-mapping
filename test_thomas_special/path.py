@@ -75,3 +75,22 @@ class Path:
             points.append((x1, y1))
 
         return Path(points)
+
+
+    def to_np_array(self):
+        return np.array(self.path)
+    
+    def __add__(self, other):
+        if isinstance(other, (int, float)):
+            return Path(list(self.to_np_array() + other))
+        elif isinstance(other, Path):
+            return Path(list(self.to_np_array() + other.to_np_array()))
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+
+
+
+if __name__ == "__main__":
+    pass

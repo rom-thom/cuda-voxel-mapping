@@ -323,7 +323,7 @@ class Field:
         """
         Unit vector pointing toward the nearest obstacle from (x,y),
         which is approximately the **negative** ESDF gradient direction.
-        Returns (dx, dy).
+        Returns (dx, dy) as a numpy array.
         """
 
         gx, gy = self.gradient_at_xy(point_xy, in_meters=in_meters)
@@ -331,7 +331,7 @@ class Field:
         n = (vx*vx + vy*vy)**0.5
         if n < eps:
             return (0.0, 0.0)
-        return (vx/n, vy/n)
+        return np.array([vx/n, vy/n])
 
 
 
