@@ -2,7 +2,7 @@ from path import Path
 from field import Field, _xy_to_rc, _closest_point, _rc_to_xy
 import numpy as np
 import APF
-from CHOMP.CHOMP_homemade import chomp
+from CHOMP import CHOMP
 
 def dist_between(p1, p2):
     return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
@@ -150,17 +150,17 @@ class PathPlaner:
 
         return weight/(c**strength)
 
-    def display(self, display_obstacle_dir=False, points_to_display = [], display_paths = False):
+    def display(self, display_obstacle_dir=False, points_to_display = [], display_paths = False, acumulate_diaplays = False):
         paths_to_display = self.paths if display_paths else []
         points_to_display.append(self.start_pos); points_to_display.append(self.end_pos); points_to_display.extend(self.points) 
         if display_obstacle_dir:
             dir = self.field.dir_to_closest(point_xy=self.pos)
             dist = self.field.dist_to_closest(self.pos) # if i want to display the exact distance i should change the radius * 2 prt with this
-            self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius, arrow_dir_xy=dir, arrow_len_m=self.radius*2, arrow_start_xy=self.pos)
+            self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius, arrow_dir_xy=dir, arrow_len_m=self.radius*2, arrow_start_xy=self.pos, acumulate_displays=acumulate_diaplays)
 
         else:  
 
-            self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius)
+            self.field.display_fields(paths_to_display, mark_xy_list=points_to_display, mark_radius_m=self.radius, acumulate_displays=acumulate_diaplays)
 
     def APF(self, start_xy, goal_xy, max_iter = 10000): # Gives a path to the end or None if it goes to deep into the loop without finding it
         def next_point(point): # -> next xy_point
@@ -219,13 +219,10 @@ class PathPlaner:
 #     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
 
 if __name__ == "__main__":
-    field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1)
+    field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1, empty=False)
 
-    test_point = (130, 10)
-    start = (140, 100)
-    end = (10, 30)
-
-    current_paths = []
+    start = (140, 70)
+    end = (10, 20)
 
     radius = 5
 
@@ -233,17 +230,22 @@ if __name__ == "__main__":
     
     line = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
 
-    ny_test_path = line
-    for i in range(20):
-        ny_test_path = chomp(field=field_obj, start_path=ny_test_path, weight_obst=0.1, weight_smooth=0.1 )
-
-
-
+    ny_test_path = Path([])
+    for i in line.to_np_array():
+        ny_test_path.add_point((i[0] + (2*np.sin(i[0])), i[1] + 2*np.sin(i[1])))
     
-    
-    pp.paths.append(line)
+    start_test = ny_test_path
+    pp.paths.append(start_test)
+
+    pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start], acumulate_diaplays=True)
+    for _ in range(20):
+        ny_test_path += CHOMP(field=field_obj, start_path=ny_test_path, weight_obst=1, weight_smoothnes=1, weight_total=0.1)
+
+    # for nr, i in enumerate(ny_test_path.to_np_array()): # This is for lifting the path up for smothnestesting
+    #     ny_test_path.path[nr] = (i[0], i[1] + 30)
+
+    pp.paths.clear()
     pp.paths.append(ny_test_path)
-    
-    pp.paths.extend(current_paths)
-    pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
+
+    pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start])
 

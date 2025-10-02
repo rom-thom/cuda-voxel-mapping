@@ -65,12 +65,13 @@ def _closest_point(start_rc, dir_xy):
     
 
 class Field:
-    def __init__(self, height=120, width=160, seed=0, spacing=12, resolution=0.05):
+    def __init__(self, height=120, width=160, seed=0, spacing=12, resolution=0.05, empty=False):
         self.height = height          # cells in y
         self.width = width            # cells in x
         self.seed = seed
         self.spacing = spacing        # cells
         self.resolution = resolution  # meters / cell
+        self.is_empty = empty
 
         # build once; you can rebuild later if needed
         self.fields = self.make_fields()
@@ -118,7 +119,8 @@ class Field:
                 mask = (Y - r)**2 + (X - c)**2 <= rad*rad
                 if (blocked & mask).any():
                     continue
-                occ[mask] = 1
+                if not self.is_empty:
+                    occ[mask] = 1
                 blocked = binary_dilation(occ.astype(bool), structure=sep)
                 placed = True
                 break
@@ -145,6 +147,7 @@ class Field:
         arrow_dir_xy=None,               # (dx,dy) direction (normalized inside)
         arrow_len_m=10,                 # arrow length (meters)
         figsize=(10, 4),
+        acumulate_displays=False       # if i want to display several at a time. then i have to saay plt.show at the end
     ):
         """
         path_xy:      list of (x,y) in METERS (origin=(0,0))
@@ -249,8 +252,8 @@ class Field:
                 axes[0].scatter(xs_cells, ys_cells, s=point_size, zorder=3)
                 axes[1].scatter(xs_cells, ys_cells, s=point_size, zorder=3)
 
-
-        plt.show()
+        if not acumulate_displays:
+            plt.show()
 
 
     @staticmethod

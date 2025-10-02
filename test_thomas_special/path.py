@@ -85,6 +85,12 @@ class Path:
             return Path(list(self.to_np_array() + other))
         elif isinstance(other, Path):
             return Path(list(self.to_np_array() + other.to_np_array()))
+    
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            return Path(list(self.to_np_array() * other))
+        elif isinstance(other, Path):
+            return Path(list(self.to_np_array() * other.to_np_array()))
 
     def __radd__(self, other):
         return self.__add__(other)
