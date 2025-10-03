@@ -254,6 +254,10 @@ class Field:
 
         if not acumulate_displays:
             plt.show()
+    
+
+    def clearance(self, point_xy, radius):
+        return self.dist_to_closest(point_xy=point_xy) - radius - np.sqrt(2) * self.resolution
 
 
     @staticmethod

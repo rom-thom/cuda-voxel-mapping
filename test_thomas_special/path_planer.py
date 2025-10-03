@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start], acumulate_diaplays=True)
     for _ in range(20):
-        ny_test_path += CHOMP(field=field_obj, start_path=ny_test_path, weight_obst=1, weight_smoothnes=1, weight_total=0.1)
+        ny_test_path += CHOMP(field=field_obj, start_path=ny_test_path, weight_obst=1, weight_smoothnes=0.5, weight_total=0.1)
 
     # for nr, i in enumerate(ny_test_path.to_np_array()): # This is for lifting the path up for smothnestesting
     #     ny_test_path.path[nr] = (i[0], i[1] + 30)
