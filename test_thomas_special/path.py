@@ -94,6 +94,9 @@ class Path:
 
     def __radd__(self, other):
         return self.__add__(other)
+    
+    def reverse(self):
+        self.path[::-1]
 
 
 

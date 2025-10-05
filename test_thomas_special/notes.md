@@ -8,7 +8,7 @@ We can know that the minimum distance to the line might be (R_1 + R_2 - s)/2 whe
 
 
 
-We could use CHOMP for smothing out the curve
+We do use CHOMP for smothing out the curve
 
 
 

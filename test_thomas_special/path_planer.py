@@ -116,8 +116,8 @@ class PathPlaner:
 
                 # Found an unsafe endpoint -> collision somewhere in [t, t+s]
                 if d1 <= 0.0: # This wil only run once at the end of the serch
-                    self.points.append((p1x, p1y)) #! debuging only
-                    #TODO the this might not be needed but i have it so that i later can pinpoint the position of impact
+                    # self.points.append((p1x, p1y)) #! debuging only
+                    #TODO the this might not be needed but i have it so that i later can pinpoint the position of impact (dont know for sertain if it works as i havent debuged it)
                     # lo, hi = t, t + s # Lowest and highest posible values
                     # for _ in range(40):                # logarithmic refinement
                     #     if hi - lo <= eps:
@@ -184,41 +184,12 @@ class PathPlaner:
         
         return path
 
-    
-# if __name__ == "__main__":
-#     field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1)
 
-#     test_point = (130, 10)
-#     start = (140, 100)
-#     end = (10, 30)
 
-#     current_paths = []
 
-#     radius = 5
-
-#     pp = PathPlaner(start, end, field_obj, radius)
-    
-#     line_spacing = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
-#     line = Path.line_path(start_xy=start, end_xy=end, n = 3)
-#     pp.paths.append(line_spacing)
-
-#     test_path = pp.APF(start, end)
-
-#     delta_test_path = CHOMP(field=field_obj, start_path=test_path, weight_obst=0.000, weight_smoothnes=5, weight_total=0.01)
-    
-#     ny_test_path = test_path + delta_test_path
-
-    
-#     pp.paths.append(test_path)
-#     pp.paths.append(ny_test_path)
-    
-#     colide = pp.is_orca_colliding(start, test_point)
-#     print("colition betwen orcas: ", colide)
-
-#     pp.paths.extend(current_paths)
-#     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start, test_point])
 
 if __name__ == "__main__":
+    from RRT import RRT
     field_obj = Field(height=120, width=160, seed=2, spacing=14, resolution=1, empty=False)
 
     start = (140, 70)
@@ -228,24 +199,21 @@ if __name__ == "__main__":
 
     pp = PathPlaner(start, end, field_obj, radius)
     
-    line = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
+    initial_path = RRT(pp, start_xy=start, goal_xy=end, ROWS=160, COLS=120)
+    if initial_path is None:
+        initial_path = Path.line_path_spacing(start_xy=start, end_xy=end, spacing=pp.radius*2)
 
-    ny_test_path = Path([])
-    for i in line.to_np_array():
-        ny_test_path.add_point((i[0] + (2*np.sin(i[0])), i[1] + 2*np.sin(i[1])))
     
-    start_test = ny_test_path
+    start_test = initial_path
     pp.paths.append(start_test)
+    ny_test_path = start_test
 
     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start], acumulate_diaplays=True)
-    for _ in range(20):
-        ny_test_path += CHOMP(field=field_obj, start_path=ny_test_path, weight_obst=1, weight_smoothnes=0.5, weight_total=0.1)
-
-    # for nr, i in enumerate(ny_test_path.to_np_array()): # This is for lifting the path up for smothnestesting
-    #     ny_test_path.path[nr] = (i[0], i[1] + 30)
+    for _ in range(200):
+        ny_test_path += CHOMP(field=field_obj, start_path=ny_test_path, weight_obst=1, weight_smoothnes=0.2, weight_total=0.1)
 
     pp.paths.clear()
+    pp.points.clear()
     pp.paths.append(ny_test_path)
 
     pp.display(display_obstacle_dir=True, display_paths=True, points_to_display=[start])
-
